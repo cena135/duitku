@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="DuitKu" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%2334c759'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='white' font-family='-apple-system,system-ui' font-weight='800'%3ERp%3C/text%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" id="appleicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%2334c759'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='white' font-family='-apple-system,system-ui' font-weight='800'%3ERp%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>DuitKu</title>
+</head>
+<body>
+  <div id="app">
+
+    <!-- ===== STICKY NAV BAR ===== -->
+    <header class="topbar" id="topbar">
+      <div class="nav-bar">
+        <div class="nav-bar-actions">
+          <button class="icon-btn" id="navBackBtn" style="display:none" aria-label="Kembali">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+        </div>
+        <div class="nav-bar-title" id="navTitle">DuitKu</div>
+        <div class="nav-bar-actions">
+          <button class="icon-btn" id="settingsBtn" aria-label="Pengaturan" title="Pengaturan">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ===== MAIN VIEWS ===== -->
+    <main id="views">
+
+      <!-- DASHBOARD -->
+      <section class="view" data-view="dashboard">
+        <h1 class="large-title">Beranda</h1>
+        <div class="large-title-sub" id="greeting">Halo</div>
+
+        <div class="onboarding-card hidden" id="onboardingCard">
+          <div class="onboarding-emoji">👋</div>
+          <div class="onboarding-title">Selamat datang di DuitKu</div>
+          <div class="onboarding-desc">Catat pengeluaran, langganan, budget, dan goal — semua di satu tempat, offline. Pilih cara mulai:</div>
+          <div class="onboarding-cta-row">
+            <button class="onboarding-cta primary" id="ctaAddFirst">Catat Pertama</button>
+            <button class="onboarding-cta" id="ctaSeedSample">Coba Data Contoh</button>
+          </div>
+        </div>
+
+        <div class="hero-card">
+          <div class="hero-label">Total Saldo</div>
+          <div class="hero-amount" id="heroBalance">Rp 0</div>
+          <div class="hero-row">
+            <div class="hero-pill income">
+              <span class="dot"></span>
+              <div>
+                <div class="hero-pill-label">Pemasukan Bulan Ini</div>
+                <div class="hero-pill-val" id="heroIncome">Rp 0</div>
+              </div>
+            </div>
+            <div class="hero-pill expense">
+              <span class="dot"></span>
+              <div>
+                <div class="hero-pill-label">Pengeluaran Bulan Ini</div>
+                <div class="hero-pill-val" id="heroExpense">Rp 0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="insightCard" class="hidden"></div>
+        <div id="statsWidget" class="hidden"></div>
+
+        <div class="grid-2">
+          <div class="stat-card">
+            <div class="stat-label">Hari ini</div>
+            <div class="stat-val" id="todayExpense">Rp 0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Transaksi hari ini <span id="streakBadge"></span></div>
+            <div class="stat-val" id="todayCount">0</div>
+          </div>
+        </div>
+
+        <div class="section-title">
+          <span>Akun</span>
+          <a class="link" id="dashAccountsLink">Kelola</a>
+        </div>
+        <div id="dashAccounts"></div>
+
+        <div class="section-title">
+          <span>Langganan Mendekati</span>
+          <a class="link" data-nav="subscription">Semua</a>
+        </div>
+        <div id="upcomingSubs"></div>
+
+        <div class="section-title">
+          <span>Status Budget</span>
+          <a class="link" data-nav="budget">Atur</a>
+        </div>
+        <div id="budgetStatus"></div>
+
+        <div class="section-title">
+          <span>Transaksi Terbaru</span>
+          <a class="link" data-nav="expense">Semua</a>
+        </div>
+        <div id="recentTx"></div>
+      </section>
+
+      <!-- EXPENSE / TRANSACTION -->
+      <section class="view hidden" data-view="expense">
+        <h1 class="large-title">Transaksi</h1>
+        <div class="large-title-sub">Catat & lihat semua transaksi</div>
+
+        <div class="view-toggle">
+          <button class="active" data-vmode="list">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg>
+            Daftar
+          </button>
+          <button data-vmode="calendar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Kalender
+          </button>
+        </div>
+
+        <div id="calendarView" class="hidden"></div>
+
+        <div id="listView">
+          <div class="segmented" style="grid-template-columns: 1fr 1fr 1fr;">
+            <button class="active" data-filter="all">Semua</button>
+            <button data-filter="expense">Keluar</button>
+            <button data-filter="income">Masuk</button>
+          </div>
+
+          <div class="account-filter-row" id="accountFilterRow"></div>
+          <div class="quick-filter-row" id="quickFilterRow"></div>
+
+          <div class="search-wrap">
+            <input type="search" id="expenseSearch" placeholder="Cari transaksi atau tag (#tag)" />
+          </div>
+
+          <div class="month-nav">
+            <button class="icon-btn muted" id="prevMonth" aria-label="Bulan sebelumnya">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <div id="monthLabel">—</div>
+            <button class="icon-btn muted" id="nextMonth" aria-label="Bulan berikutnya">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
+          <div class="summary-row">
+            <div class="mini-stat">
+              <div class="mini-label">Masuk</div>
+              <div class="mini-val income-txt" id="monthIncome">Rp 0</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-label">Keluar</div>
+              <div class="mini-val expense-txt" id="monthExpense">Rp 0</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-label">Selisih</div>
+              <div class="mini-val" id="monthDiff">Rp 0</div>
+            </div>
+          </div>
+
+          <div id="expenseList"></div>
+        </div>
+      </section>
+
+      <!-- SUBSCRIPTION / RECURRING -->
+      <section class="view hidden" data-view="subscription">
+        <h1 class="large-title">Langganan</h1>
+        <div class="large-title-sub">Berulang otomatis & subscription</div>
+
+        <div class="hero-card">
+          <div class="hero-label">Total per Bulan</div>
+          <div class="hero-amount" id="subMonthly">Rp 0</div>
+          <div class="hero-row">
+            <div class="hero-pill info">
+              <span class="dot"></span>
+              <div>
+                <div class="hero-pill-label">Per Tahun</div>
+                <div class="hero-pill-val" id="subYearly">Rp 0</div>
+              </div>
+            </div>
+            <div class="hero-pill warning">
+              <span class="dot"></span>
+              <div>
+                <div class="hero-pill-label">Aktif</div>
+                <div class="hero-pill-val" id="subActive">0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title"><span>Daftar</span></div>
+        <div id="subList"></div>
+      </section>
+
+      <!-- BUDGET -->
+      <section class="view hidden" data-view="budget">
+        <h1 class="large-title">Budget</h1>
+        <div class="large-title-sub">Atur batas & tabungan</div>
+
+        <div class="segmented" style="grid-template-columns: 1fr 1fr;">
+          <button class="active" data-tab="budget-tab">Budget</button>
+          <button data-tab="goal-tab">Tabungan</button>
+        </div>
+
+        <div class="tab-pane" data-tab-pane="budget-tab">
+          <div class="hero-card">
+            <div class="hero-label">Total Budget Bulan Ini</div>
+            <div class="hero-amount" id="budgetTotal">Rp 0</div>
+            <div class="hero-row">
+              <div class="hero-pill expense">
+                <span class="dot"></span>
+                <div>
+                  <div class="hero-pill-label">Terpakai</div>
+                  <div class="hero-pill-val" id="budgetUsed">Rp 0</div>
+                </div>
+              </div>
+              <div class="hero-pill income">
+                <span class="dot"></span>
+                <div>
+                  <div class="hero-pill-label">Sisa</div>
+                  <div class="hero-pill-val" id="budgetRemaining">Rp 0</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-title">
+            <span>Per Kategori</span>
+            <button class="link" id="addBudgetBtn">Atur</button>
+          </div>
+          <div id="budgetList"></div>
+        </div>
+
+        <div class="tab-pane hidden" data-tab-pane="goal-tab">
+          <div class="section-title">
+            <span>Goal Tabungan</span>
+            <button class="link" id="addGoalBtn">Baru</button>
+          </div>
+          <div id="goalList"></div>
+        </div>
+      </section>
+
+      <!-- REPORTS -->
+      <section class="view hidden" data-view="reports">
+        <h1 class="large-title">Laporan</h1>
+        <div class="large-title-sub">Analisis & trend keuangan</div>
+
+        <div class="month-nav">
+          <button class="icon-btn muted" id="prevReport" aria-label="Bulan sebelumnya">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div id="reportMonthLabel">—</div>
+          <button class="icon-btn muted" id="nextReport" aria-label="Bulan berikutnya">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+
+        <div class="report-summary">
+          <div class="report-stat">
+            <div class="rs-label">Pemasukan</div>
+            <div class="rs-val income-txt" id="rpIncome">Rp 0</div>
+          </div>
+          <div class="report-stat">
+            <div class="rs-label">Pengeluaran</div>
+            <div class="rs-val expense-txt" id="rpExpense">Rp 0</div>
+          </div>
+          <div class="report-stat">
+            <div class="rs-label">Tabungan</div>
+            <div class="rs-val" id="rpSaving">Rp 0</div>
+          </div>
+          <div class="report-stat">
+            <div class="rs-label">Rata-rata / hari</div>
+            <div class="rs-val" id="rpDaily">Rp 0</div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">Bulan Ini vs Bulan Lalu</div>
+          <div class="compare-grid">
+            <div class="compare-col">
+              <div class="cc-label">Bulan Lalu</div>
+              <div class="cc-val expense-txt" id="cmpPrev">Rp 0</div>
+            </div>
+            <div class="compare-col">
+              <div class="cc-label">Bulan Ini</div>
+              <div class="cc-val expense-txt" id="cmpThis">Rp 0</div>
+            </div>
+          </div>
+          <div class="compare-diff" id="cmpDiff">—</div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">Per Kategori</div>
+          <div class="chart-wrap"><canvas id="chartPie"></canvas></div>
+          <div id="chartPieLegend" class="legend"></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">Trend 6 Bulan</div>
+          <div class="chart-wrap"><canvas id="chartLine"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">Top 5 Pengeluaran</div>
+          <div id="topExpenses"></div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="view hidden" data-view="settings">
+        <h1 class="large-title">Pengaturan</h1>
+        <div class="large-title-sub">Sesuaikan tampilan & format</div>
+
+        <div class="group">
+          <div class="group-header">Tampilan</div>
+          <div class="group-body">
+            <div class="cell" id="cellTheme">
+              <div class="cell-icon" style="background:#5856d6">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Tema</div></div>
+              <div class="cell-value" id="themeValue">Otomatis</div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellDensity">
+              <div class="cell-icon" style="background:#5ac8fa">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Kerapatan</div></div>
+              <div class="cell-value" id="densityValue">Nyaman</div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-header">Warna Aksen</div>
+          <div class="group-body">
+            <div class="accent-grid" id="accentGrid">
+              <div class="accent-swatch" data-c="blue"></div>
+              <div class="accent-swatch" data-c="green"></div>
+              <div class="accent-swatch" data-c="indigo"></div>
+              <div class="accent-swatch" data-c="orange"></div>
+              <div class="accent-swatch" data-c="pink"></div>
+              <div class="accent-swatch" data-c="purple"></div>
+              <div class="accent-swatch" data-c="red"></div>
+              <div class="accent-swatch" data-c="teal"></div>
+              <div class="accent-swatch" data-c="yellow"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-header">Keuangan</div>
+          <div class="group-body">
+            <div class="cell" id="cellAccounts">
+              <div class="cell-icon" style="background:#34c759">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Akun & Dompet</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellDebts">
+              <div class="cell-icon" style="background:#ff2d55">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Hutang & Piutang</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellTags">
+              <div class="cell-icon" style="background:#af52de">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Tag</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-header">Format</div>
+          <div class="group-body">
+            <div class="cell" id="cellCurrency">
+              <div class="cell-icon" style="background:#34c759">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Mata Uang</div></div>
+              <div class="cell-value" id="currencyValue">IDR (Rp)</div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellDecimals">
+              <div class="cell-icon" style="background:#ff9500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Tampilkan Desimal</div></div>
+              <div class="switch" id="switchDecimals"></div>
+            </div>
+            <div class="cell" id="cellMonthStart">
+              <div class="cell-icon" style="background:#ff3b30">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </div>
+              <div class="cell-main">
+                <div class="cell-title">Awal Bulan</div>
+                <div class="cell-sub">Tanggal mulai siklus</div>
+              </div>
+              <div class="cell-value" id="monthStartValue">Tgl 1</div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-header">Kategori</div>
+          <div class="group-body">
+            <div class="cell" id="cellEditExpense">
+              <div class="cell-icon" style="background:#ff3b30">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Kategori Pengeluaran</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellEditIncome">
+              <div class="cell-icon" style="background:#34c759">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Kategori Pemasukan</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellEditSub">
+              <div class="cell-icon" style="background:#007aff">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Kategori Langganan</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-header">Perilaku</div>
+          <div class="group-body">
+            <div class="cell" id="cellHaptic">
+              <div class="cell-icon" style="background:#af52de">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+              </div>
+              <div class="cell-main">
+                <div class="cell-title">Getar saat simpan</div>
+                <div class="cell-sub">Hanya di HP yang dukung</div>
+              </div>
+              <div class="switch" id="switchHaptic"></div>
+            </div>
+            <div class="cell" id="cellAutoRecurring">
+              <div class="cell-icon" style="background:#007aff">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              </div>
+              <div class="cell-main">
+                <div class="cell-title">Auto-eksekusi Langganan</div>
+                <div class="cell-sub">Auto-catat saat jatuh tempo</div>
+              </div>
+              <div class="switch" id="switchAutoRec"></div>
+            </div>
+            <div class="cell" id="cellNotif">
+              <div class="cell-icon" style="background:#ff9500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              </div>
+              <div class="cell-main">
+                <div class="cell-title">Notifikasi Browser</div>
+                <div class="cell-sub" id="notifSub">Untuk reminder langganan</div>
+              </div>
+              <div class="switch" id="switchNotif"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-header">Data</div>
+          <div class="group-body">
+            <div class="cell" id="cellShare">
+              <div class="cell-icon" style="background:#007aff">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Share Backup</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellExport">
+              <div class="cell-icon" style="background:#5856d6">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Export JSON</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellExportCsv">
+              <div class="cell-icon" style="background:#34c759">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Export CSV (Transaksi)</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellImport">
+              <div class="cell-icon" style="background:#34c759">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Import Backup (JSON)</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <input type="file" id="importFile" accept="application/json" hidden />
+            <div class="cell" id="cellSeed">
+              <div class="cell-icon" style="background:#ff9500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title">Isi Data Contoh</div></div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellReset">
+              <div class="cell-icon" style="background:#ff3b30">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+              </div>
+              <div class="cell-main"><div class="cell-title expense-txt">Hapus Semua Data</div></div>
+            </div>
+          </div>
+          <div class="group-footer">Data tersimpan di HP-mu (localStorage). Rutin export ke file untuk backup.</div>
+        </div>
+
+        <div class="group">
+          <div class="group-header">Tentang</div>
+          <div class="group-body">
+            <div class="cell" style="cursor:default">
+              <div class="cell-main"><div class="cell-title">Versi</div></div>
+              <div class="cell-value">2.0.0</div>
+            </div>
+            <div class="cell" style="cursor:default">
+              <div class="cell-main"><div class="cell-title">Penyimpanan</div></div>
+              <div class="cell-value" id="storageSize">—</div>
+            </div>
+          </div>
+          <div class="group-footer">DuitKu — offline-first, no tracking, no cloud.</div>
+        </div>
+
+        <div class="spacer-lg"></div>
+      </section>
+
+      <!-- ACCOUNTS -->
+      <section class="view hidden" data-view="accounts">
+        <h1 class="large-title">Akun & Dompet</h1>
+        <div class="large-title-sub">Tunai, bank, e-wallet, kartu</div>
+
+        <div class="hero-card">
+          <div class="hero-label">Total Saldo</div>
+          <div class="hero-amount" id="acctTotal">Rp 0</div>
+          <div class="hero-row">
+            <div class="hero-pill info">
+              <span class="dot"></span>
+              <div>
+                <div class="hero-pill-label">Jumlah Akun</div>
+                <div class="hero-pill-val" id="acctCount">0</div>
+              </div>
+            </div>
+            <div class="hero-pill income">
+              <span class="dot"></span>
+              <div>
+                <div class="hero-pill-label">Aktif</div>
+                <div class="hero-pill-val" id="acctActive">0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">
+          <span>Daftar Akun</span>
+          <button class="link" id="addAccountBtn">Tambah</button>
+        </div>
+        <div id="accountsList"></div>
+      </section>
+
+      <!-- DEBTS -->
+      <section class="view hidden" data-view="debts">
+        <h1 class="large-title">Hutang & Piutang</h1>
+        <div class="large-title-sub">Siapa hutang apa</div>
+
+        <div class="hero-card">
+          <div class="hero-label">Net Posisi</div>
+          <div class="hero-amount" id="debtNet">Rp 0</div>
+          <div class="hero-row">
+            <div class="hero-pill income">
+              <span class="dot"></span>
+              <div>
+                <div class="hero-pill-label">Mereka Hutang ke Kamu</div>
+                <div class="hero-pill-val" id="debtOwed">Rp 0</div>
+              </div>
+            </div>
+            <div class="hero-pill expense">
+              <span class="dot"></span>
+              <div>
+                <div class="hero-pill-label">Kamu Hutang ke Mereka</div>
+                <div class="hero-pill-val" id="debtIOwe">Rp 0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="segmented" style="grid-template-columns: 1fr 1fr 1fr;">
+          <button class="active" data-debt-filter="all">Semua</button>
+          <button data-debt-filter="owed_to_me">Piutang</button>
+          <button data-debt-filter="i_owe">Hutang</button>
+        </div>
+
+        <div class="section-title">
+          <span>Daftar</span>
+          <button class="link" id="addDebtBtn">Baru</button>
+        </div>
+        <div id="debtsList"></div>
+      </section>
+
+      <!-- TAGS -->
+      <section class="view hidden" data-view="tags">
+        <h1 class="large-title">Tag</h1>
+        <div class="large-title-sub">Label tambahan untuk transaksi</div>
+
+        <div class="section-title">
+          <span>Daftar Tag</span>
+          <button class="link" id="addTagBtn">Baru</button>
+        </div>
+        <div id="tagsList"></div>
+      </section>
+
+    </main>
+
+    <!-- ===== FAB ===== -->
+    <button class="fab" id="fabAdd" aria-label="Tambah">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+
+    <!-- ===== TAB BAR ===== -->
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-nav="dashboard">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1V9.5z"/></svg>
+        <span>Beranda</span>
+      </button>
+      <button class="tab-btn" data-nav="expense">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span>Transaksi</span>
+      </button>
+      <button class="tab-btn" data-nav="subscription">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><polyline points="21 3 21 8 16 8"/></svg>
+        <span>Langganan</span>
+      </button>
+      <button class="tab-btn" data-nav="budget">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Budget</span>
+      </button>
+      <button class="tab-btn" data-nav="reports">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Laporan</span>
+      </button>
+    </nav>
+
+    <!-- ===== MODAL ===== -->
+    <div class="modal-backdrop hidden" id="modalBackdrop"></div>
+    <div class="modal hidden" id="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <button class="modal-action" id="modalCancel">Batal</button>
+        <div class="modal-title" id="modalTitle">Tambah</div>
+        <button class="modal-action bold" id="modalSave" style="visibility:hidden">Simpan</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+
+    <!-- ===== ACTION SHEET ===== -->
+    <div class="action-sheet-backdrop hidden" id="actionSheetBackdrop"></div>
+    <div class="action-sheet hidden" id="actionSheet">
+      <div class="action-sheet-group" id="actionSheetContent"></div>
+      <div class="action-sheet-group">
+        <button class="action-item" id="actionSheetCancel" style="justify-content:center;color:var(--label);font-weight:600">Batal</button>
+      </div>
+    </div>
+
+    <!-- ===== PHOTO VIEWER ===== -->
+    <div class="photo-viewer hidden" id="photoViewer">
+      <button class="close-x" id="photoClose">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <img id="photoViewerImg" src="" alt="receipt" />
+    </div>
+
+    <!-- ===== SUCCESS OVERLAY ===== -->
+    <div class="success-overlay hidden" id="successOverlay">
+      <div class="success-circle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline class="checkpath" points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ===== CONFETTI ===== -->
+    <div class="confetti-wrap hidden" id="confettiWrap"></div>
+
+    <!-- ===== TOAST ===== -->
+    <div class="toast hidden" id="toast"></div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "appId": "app.duitku.android",
+  "appName": "DuitKu",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

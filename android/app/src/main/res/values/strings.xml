@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DuitKu</string>
+    <string name="title_activity_main">DuitKu</string>
+    <string name="package_name">app.duitku.android</string>
+    <string name="custom_url_scheme">app.duitku.android</string>
+</resources>

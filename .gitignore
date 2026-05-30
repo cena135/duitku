@@ -1,0 +1,54 @@
+# Node
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# Capacitor / Android
+android/build/
+android/app/build/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/captures/
+android/captures/
+android/.cxx/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test scratch
+_test*.html
+_t_*.png
+_shot_*.png
+_v2_*.png
+_final_*.png
+_debug.html
+_screenshot.png
+
+# Build outputs (ignore everywhere EXCEPT the root release APK for easy download)
+*.apk
+*.aab
+!DuitKu-debug.apk
+
+# Test scratch files
+_e2e.html
+_seed.html
+_p6_*.png
+_l_*.png
+_m_*.png
+_n_*.png
+_v3_*.png
+_sd_*.png
+_sp*.png
+_t_*.png
+
+# Temp/working files
+*.log
+.DS_Store
+Thumbs.db

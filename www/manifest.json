@@ -1,0 +1,63 @@
+{
+  "name": "DuitKu — Pencatat Keuangan Harian",
+  "short_name": "DuitKu",
+  "description": "Catat pengeluaran, langganan, budget, akun, hutang & piutang. Offline-first, semua data tersimpan di HP-mu. No cloud, no tracking.",
+  "id": "/duitku/",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["finance", "productivity", "utilities", "lifestyle"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='42' fill='%2334c759'/%3E%3Ctext x='96' y='130' font-size='110' text-anchor='middle' fill='white' font-family='-apple-system,system-ui' font-weight='800'%3ERp%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%2334c759'/%3E%3Ctext x='96' y='130' font-size='100' text-anchor='middle' fill='white' font-family='-apple-system,system-ui' font-weight='800'%3ERp%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%2334c759'/%3E%3Ctext x='256' y='340' font-size='290' text-anchor='middle' fill='white' font-family='-apple-system,system-ui' font-weight='800'%3ERp%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%2334c759'/%3E%3Ctext x='256' y='340' font-size='260' text-anchor='middle' fill='white' font-family='-apple-system,system-ui' font-weight='800'%3ERp%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Tambah Transaksi",
+      "short_name": "Transaksi",
+      "url": "./index.html#expense",
+      "description": "Catat pengeluaran atau pemasukan"
+    },
+    {
+      "name": "Langganan",
+      "short_name": "Langganan",
+      "url": "./index.html#subscription",
+      "description": "Kelola subscription bulanan"
+    },
+    {
+      "name": "Laporan",
+      "short_name": "Laporan",
+      "url": "./index.html#reports",
+      "description": "Lihat analisis & trend"
+    }
+  ]
+}
