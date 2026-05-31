@@ -16,6 +16,8 @@
   <title>DuitKu</title>
 </head>
 <body>
+  <a href="#views" class="skip-link">Lewati ke konten utama</a>
+
   <div id="app">
 
     <!-- ===== STICKY NAV BAR ===== -->
@@ -351,16 +353,16 @@
         <div class="group">
           <div class="group-header">Warna Aksen</div>
           <div class="group-body">
-            <div class="accent-grid" id="accentGrid">
-              <div class="accent-swatch" data-c="blue"></div>
-              <div class="accent-swatch" data-c="green"></div>
-              <div class="accent-swatch" data-c="indigo"></div>
-              <div class="accent-swatch" data-c="orange"></div>
-              <div class="accent-swatch" data-c="pink"></div>
-              <div class="accent-swatch" data-c="purple"></div>
-              <div class="accent-swatch" data-c="red"></div>
-              <div class="accent-swatch" data-c="teal"></div>
-              <div class="accent-swatch" data-c="yellow"></div>
+            <div class="accent-grid" id="accentGrid" role="radiogroup" aria-label="Pilih warna aksen">
+              <div class="accent-swatch" data-c="blue"   tabindex="0" role="radio" aria-label="Biru"></div>
+              <div class="accent-swatch" data-c="green"  tabindex="0" role="radio" aria-label="Hijau"></div>
+              <div class="accent-swatch" data-c="indigo" tabindex="0" role="radio" aria-label="Indigo"></div>
+              <div class="accent-swatch" data-c="orange" tabindex="0" role="radio" aria-label="Oranye"></div>
+              <div class="accent-swatch" data-c="pink"   tabindex="0" role="radio" aria-label="Pink"></div>
+              <div class="accent-swatch" data-c="purple" tabindex="0" role="radio" aria-label="Ungu"></div>
+              <div class="accent-swatch" data-c="red"    tabindex="0" role="radio" aria-label="Merah"></div>
+              <div class="accent-swatch" data-c="teal"   tabindex="0" role="radio" aria-label="Tosca"></div>
+              <div class="accent-swatch" data-c="yellow" tabindex="0" role="radio" aria-label="Kuning"></div>
             </div>
           </div>
         </div>
@@ -473,6 +475,16 @@
                 <div class="cell-sub">Auto-catat saat jatuh tempo</div>
               </div>
               <div class="switch" id="switchAutoRec"></div>
+            </div>
+            <div class="cell" id="cellBudgetRollover">
+              <div class="cell-icon" style="background:#5ac8fa">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+              </div>
+              <div class="cell-main">
+                <div class="cell-title">Budget Rollover</div>
+                <div class="cell-sub">Sisa budget bulan lalu nambah ke bulan ini</div>
+              </div>
+              <div class="switch" id="switchBudgetRollover"></div>
             </div>
             <div class="cell" id="cellNotif">
               <div class="cell-icon" style="background:#ff9500">
@@ -641,8 +653,8 @@
     </main>
 
     <!-- ===== FAB ===== -->
-    <button class="fab" id="fabAdd" aria-label="Tambah">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    <button class="fab" id="fabAdd" aria-label="Tambah transaksi (tahan untuk menu cepat)" title="Tap: tambah · Tahan: menu cepat">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     </button>
 
     <!-- ===== TAB BAR ===== -->
@@ -711,7 +723,7 @@
     <div class="confetti-wrap hidden" id="confettiWrap"></div>
 
     <!-- ===== TOAST ===== -->
-    <div class="toast hidden" id="toast"></div>
+    <div class="toast hidden" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   </div>
 

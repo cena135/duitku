@@ -209,6 +209,7 @@ function defaultState() {
       lastNotifCheck: 0,
       customCategories: {},
       defaultAccountId: 'acc_cash',
+      budgetRollover: false,  // when true, unused prev-month budget carries forward
     },
   };
 }
@@ -432,7 +433,7 @@ function el(tag, attrs = {}, ...children) {
 // caller refresh the active selection on rebuild.
 function buildCategoryPicker(type, getCurrent, onChange) {
   const cats = getCategories(type);
-  const grid = el('div', { class: 'cat-grid' });
+  const grid = el('div', { class: 'cat-grid', role: 'radiogroup', 'aria-label': 'Pilih kategori' });
   const refresh = () => {
     grid.querySelectorAll('.cat-tile').forEach((tl, i) =>
       tl.classList.toggle('active', cats[i].id === getCurrent()));
@@ -440,6 +441,9 @@ function buildCategoryPicker(type, getCurrent, onChange) {
   cats.forEach(c => {
     grid.appendChild(el('div', {
       class: 'cat-tile' + (getCurrent() === c.id ? ' active' : ''),
+      tabindex: '0', role: 'radio',
+      'aria-checked': getCurrent() === c.id ? 'true' : 'false',
+      'aria-label': c.name,
       onclick: () => { onChange(c.id); haptic(5); refresh(); }
     }, el('div', { class: 'ic' }, c.icon), c.name));
   });
@@ -451,11 +455,14 @@ function buildCategoryPicker(type, getCurrent, onChange) {
 // (transfer) to reject invalid choices. Returns the grid element.
 function buildAccountPicker(getCurrent, onChange, opts = {}) {
   const accs = opts.accounts || getAccounts();
-  const grid = el('div', { class: 'account-picker-grid' });
+  const grid = el('div', { class: 'account-picker-grid', role: 'radiogroup', 'aria-label': 'Pilih akun' });
   accs.forEach(a => {
     const info = accountTypeInfo(a.type);
     grid.appendChild(el('div', {
       class: 'account-picker-tile' + (getCurrent() === a.id ? ' active' : ''),
+      tabindex: '0', role: 'radio',
+      'aria-checked': getCurrent() === a.id ? 'true' : 'false',
+      'aria-label': a.name + ' (' + info.label + ')',
       onclick: () => {
         if (opts.validate && !opts.validate(a.id)) return;
         onChange(a.id);
@@ -907,11 +914,25 @@ function renderStatsWidget() {
   });
   wrap.appendChild(grid);
 
-  // Show start-end range
-  const first = days[0].date, last = days[6].date;
+  // Footer: start-end range + top category this week
+  const first = days[0].date;
+  const weekTx = state.expenses.filter(t => {
+    const d = new Date(t.date);
+    return t.type === 'expense' && d >= first && d <= today;
+  });
+  const weekByCat = groupSpendingByCategory(weekTx);
+  const sortedCats = Object.entries(weekByCat).sort((a,b) => b[1]-a[1]);
+  const topCatEl = el('span', {}, 'Sekarang');
+  if (sortedCats.length > 0 && totalWeek > 0) {
+    const [topCatId, topAmt] = sortedCats[0];
+    const cat = getCategory('expense', topCatId);
+    const pct = Math.round((topAmt / totalWeek) * 100);
+    topCatEl.textContent = '';
+    topCatEl.appendChild(document.createTextNode('Top: ' + cat.icon + ' ' + cat.name + ' ' + pct + '%'));
+  }
   wrap.appendChild(el('div', { class: 'stats-week-labels' },
     el('span', {}, shortDate(first.toISOString())),
-    el('span', {}, 'Sekarang')
+    topCatEl
   ));
 }
 
@@ -1074,6 +1095,7 @@ function renderDashboard() {
   if (insight && !isStateEmpty()) {
     insightCard.classList.remove('hidden');
     insightCard.className = 'insight-card';
+    insightCard.setAttribute('data-kind', insight.kind);
     insightCard.innerHTML = '';
     insightCard.appendChild(el('div', { class: 'insight-icon' }, insight.icon));
     const txt = el('div', { class: 'insight-text ' + insight.tone });
@@ -1156,6 +1178,20 @@ function groupSpendingByCategory(txs) {
   return txs.filter(t => t.type === 'expense').reduce((acc, t) => {
     acc[t.category] = (acc[t.category] || 0) + t.amount; return acc;
   }, {});
+}
+
+// Budget rollover: if enabled, surplus from previous month adds to current limit.
+// Returns { effectiveLimit, rollover, baseLimit }.
+function effectiveBudget(categoryId) {
+  const base = state.budgets[categoryId] || 0;
+  if (!state.settings.budgetRollover || base <= 0) {
+    return { effectiveLimit: base, rollover: 0, baseLimit: base };
+  }
+  const prevRef = getMonthDate(-1);
+  const prevTx = state.expenses.filter(t => isInMonth(t.date, prevRef) && t.type === 'expense' && t.category === categoryId);
+  const prevUsed = prevTx.reduce((s, t) => s + t.amount, 0);
+  const surplus = Math.max(0, base - prevUsed);
+  return { effectiveLimit: base + surplus, rollover: surplus, baseLimit: base };
 }
 
 // ============================================================
@@ -1771,25 +1807,32 @@ function renderBudgetTab() {
 
 function renderBudgetRow(b) {
   const cat = getCategory('expense', b.cat);
-  const pct = b.limit > 0 ? Math.min(100, (b.used / b.limit) * 100) : 0;
-  const over = b.used > b.limit;
+  const eff = effectiveBudget(b.cat);
+  const limit = eff.effectiveLimit;
+  const pct = limit > 0 ? Math.min(100, (b.used / limit) * 100) : 0;
+  const over = b.used > limit;
   let progCls = 'progress';
   if (pct >= 100) progCls += ' danger';
   else if (pct >= 75) progCls += ' warning';
+
+  // Show rollover badge if user has carry-forward enabled and there's surplus
+  const limitText = eff.rollover > 0
+    ? moneyShort(eff.baseLimit) + ' + ' + moneyShort(eff.rollover) + ' carry'
+    : moneyShort(limit);
 
   return el('div', { class: 'budget-card', onclick: () => openBudgetModal(b.cat) },
     el('div', { class: 'bc-head' },
       el('div', { class: 'bc-name' }, el('span', {}, cat.icon), el('span', {}, cat.name)),
       el('div', { class: 'bc-amounts' },
         el('strong', { class: over ? 'expense-txt' : '' }, moneyShort(b.used)),
-        ' / ' + moneyShort(b.limit)
+        ' / ' + limitText
       )
     ),
     el('div', { class: progCls }, el('span', { style: `width:${pct}%` })),
     el('div', { class: 'bc-foot' },
       el('span', {}, `${pct.toFixed(0)}% terpakai`),
       el('span', { class: over ? 'expense-txt' : 'muted-txt' },
-        over ? 'Over ' + moneyShort(b.used - b.limit) : 'Sisa ' + moneyShort(b.limit - b.used)
+        over ? 'Over ' + moneyShort(b.used - limit) : 'Sisa ' + moneyShort(limit - b.used)
       )
     )
   );
@@ -2004,6 +2047,7 @@ function renderSettings() {
   $('#switchHaptic').classList.toggle('on', !!s.haptic);
   $('#switchAutoRec').classList.toggle('on', !!s.autoExecRecurring);
   $('#switchNotif').classList.toggle('on', !!s.notifications);
+  $('#switchBudgetRollover')?.classList.toggle('on', !!s.budgetRollover);
   $$('.accent-swatch').forEach(sw => sw.classList.toggle('active', sw.dataset.c === s.accent));
   try {
     const size = new Blob([localStorage.getItem(STORAGE_KEY) || '']).size;
@@ -3391,15 +3435,25 @@ function amountInput(onChange, value, cls = '') {
   });
 }
 
+// A11y: cache element that had focus before modal opened so we can restore on close
+let _modalReturnFocus = null;
+
 function showModal({ title, body, save }) {
   ui.currentModalSave = { title, bodyFn: body, save };
+  _modalReturnFocus = document.activeElement;
   $('#modalTitle').textContent = title;
   $('#modalBody').innerHTML = '';
   $('#modalBody').appendChild(body());
   $('#modalSave').style.visibility = save ? '' : 'hidden';
-  $('#modal').classList.remove('hidden');
+  const modal = $('#modal');
+  modal.classList.remove('hidden');
   $('#modalBackdrop').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+  // Focus first interactive element inside modal for keyboard users
+  setTimeout(() => {
+    const first = modal.querySelector('input:not([type=hidden]), select, textarea, button:not([style*="visibility:hidden"])');
+    if (first && typeof first.focus === 'function') first.focus({ preventScroll: true });
+  }, 50);
 }
 function hideModal() {
   $('#modal').classList.add('hidden');
@@ -3411,6 +3465,60 @@ function hideModal() {
     try { voiceRecognition.abort(); } catch {}
     voiceRecognition = null;
   }
+  // Restore focus to whatever triggered the modal
+  if (_modalReturnFocus && typeof _modalReturnFocus.focus === 'function') {
+    try { _modalReturnFocus.focus({ preventScroll: true }); } catch {}
+  }
+  _modalReturnFocus = null;
+}
+
+// A11y: focus trap — when modal is open, Tab cycles within it
+function setupFocusTrap() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const modal = $('#modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const focusables = modal.querySelectorAll(
+      'a[href], button:not([disabled]):not([style*="visibility:hidden"]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  });
+}
+
+// A11y: keyboard nav for picker grids — arrow keys move focus among siblings
+function setupGridKeyboardNav() {
+  document.addEventListener('keydown', (e) => {
+    if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter',' '].includes(e.key)) return;
+    const focused = document.activeElement;
+    if (!focused) return;
+    const grid = focused.closest('.cat-grid, .account-picker-grid, .accent-grid, .emoji-grid');
+    if (!grid) return;
+    const items = Array.from(grid.children).filter(c => c.tagName !== 'BR');
+    const idx = items.indexOf(focused);
+    if (idx < 0) return;
+    // Activate on Enter/Space (treat as click)
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault(); focused.click(); return;
+    }
+    // Estimate columns from grid template
+    const cols = Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+    let next = idx;
+    if (e.key === 'ArrowLeft')  next = Math.max(0, idx - 1);
+    if (e.key === 'ArrowRight') next = Math.min(items.length - 1, idx + 1);
+    if (e.key === 'ArrowUp')    next = Math.max(0, idx - cols);
+    if (e.key === 'ArrowDown')  next = Math.min(items.length - 1, idx + cols);
+    if (next !== idx) {
+      e.preventDefault();
+      items[next].focus();
+    }
+  });
 }
 
 // ============================================================
@@ -3880,6 +3988,8 @@ function init() {
   setupLongPress();
   setupTapRipple();
   setupModalDrag();
+  setupFocusTrap();
+  setupGridKeyboardNav();
 
   // Onboarding CTAs
   $('#ctaAddFirst')?.addEventListener('click', () => openExpenseModal());
@@ -3964,6 +4074,11 @@ function init() {
   $('#cellAutoRecurring').addEventListener('click', () => {
     state.settings.autoExecRecurring = !state.settings.autoExecRecurring;
     save(); renderSettings();
+  });
+  $('#cellBudgetRollover')?.addEventListener('click', () => {
+    state.settings.budgetRollover = !state.settings.budgetRollover;
+    save(); renderSettings();
+    if (ui.view === 'budget') render(); // refresh limits live
   });
   $('#cellNotif').addEventListener('click', async () => {
     await setupNotifications(!state.settings.notifications);

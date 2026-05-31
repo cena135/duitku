@@ -2109,6 +2109,51 @@ button:focus-visible, .cell:focus-visible, .tx-row:focus-visible,
 }
 
 /* ============================================================
+   A11Y — skip-to-content link
+   ============================================================ */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 10px 16px;
+  border-radius: 0 0 10px 0;
+  font-weight: 600;
+  font-size: 14px;
+  z-index: 9999;
+  text-decoration: none;
+}
+.skip-link:focus {
+  left: 0;
+  outline: 2px solid white;
+  outline-offset: -3px;
+}
+
+/* ============================================================
+   INSIGHT ICON MOTION — subtle per-kind animation
+   ============================================================ */
+.insight-icon {
+  display: inline-grid;
+  place-items: center;
+  transition: transform .3s ease;
+}
+.insight-card[data-kind="first-month"] .insight-icon { animation: insight-rocket 4s ease-in-out infinite; }
+.insight-card[data-kind="up"] .insight-icon,
+.insight-card[data-kind="projection"] .insight-icon,
+.insight-card[data-kind="cat-up"] .insight-icon { animation: insight-up 2.5s ease-in-out infinite; }
+.insight-card[data-kind="down"] .insight-icon,
+.insight-card[data-kind="cat-down"] .insight-icon { animation: insight-down 2.5s ease-in-out infinite; }
+.insight-card[data-kind="budget-warn"] .insight-icon { animation: insight-shake 3s ease-in-out infinite; }
+.insight-card[data-kind="weekend"] .insight-icon { animation: insight-bounce 2s ease-in-out infinite; }
+
+@keyframes insight-rocket { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-3px) rotate(-8deg) } }
+@keyframes insight-up     { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-2px) } }
+@keyframes insight-down   { 0%,100% { transform:translateY(0) } 50% { transform:translateY(2px) } }
+@keyframes insight-shake  { 0%,90%,100% { transform:translateX(0) } 92% { transform:translateX(-2px) } 94% { transform:translateX(2px) } 96% { transform:translateX(-1px) } }
+@keyframes insight-bounce { 0%,100% { transform:scale(1) } 50% { transform:scale(1.08) } }
+
+/* ============================================================
    TOAST VARIANTS — semantic colors + icon
    ============================================================ */
 .toast {
