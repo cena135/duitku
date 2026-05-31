@@ -407,6 +407,16 @@
           <div id="yearlySummaryCard"></div>
         </div>
 
+        <div class="chart-card" id="weeklyVelocityCard">
+          <div class="chart-title">Kecepatan Pengeluaran (8 Minggu)</div>
+          <div class="chart-wrap"><canvas></canvas></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">Tren Kategori (MoM)</div>
+          <div id="categoryTrendCard"></div>
+        </div>
+
         <div class="chart-card">
           <div class="chart-title">Top 5 Pengeluaran Terbesar</div>
           <div id="topExpensesCard"></div>
@@ -896,6 +906,8 @@
     <div class="confetti-wrap hidden" id="confettiWrap"></div>
 
     <!-- ===== BULK ACTION BAR ===== -->
+    <div class="undo-bar hidden" id="undoBar" role="status" aria-live="polite"></div>
+
     <div class="bulk-action-bar" id="bulkActionBar">
       <span id="bulkCount">0 dipilih</span>
       <div class="bulk-actions-scroll">

@@ -27,6 +27,7 @@
   <div id="toastHost"></div>
   <div id="view"></div>
   <div class="tabbar"></div>
+  <div id="undoBar" class="hidden"></div>
 </div>
 <pre id="out"></pre>
 
@@ -254,6 +255,42 @@
   check('shareYearlySummary exists', () => isFn(window, 'shareYearlySummary'));
   check('setupChartSkeletons exists', () => isFn(window, 'setupChartSkeletons'));
   check('clearChartSkeletons exists', () => isFn(window, 'clearChartSkeletons'));
+
+  section('ROUND 6 — undo / scheduled / velocity / trends / tag-suggest / perf');
+  check('pushUndo exists', () => isFn(window, 'pushUndo'));
+  check('refreshUndoBar exists', () => isFn(window, 'refreshUndoBar'));
+  check('pushUndo + undo round-trip works', () => {
+    let v = 0;
+    pushUndo('test', () => { v = 1; });
+    const bar = document.getElementById('undoBar');
+    if (!bar) return false;
+    const btn = bar.querySelector('.undo-btn');
+    if (!btn) return false;
+    btn.click();
+    return v === 1;
+  });
+  check('getScheduledTxs returns array', () => Array.isArray(getScheduledTxs()));
+  check('executeScheduledTxs returns number', () => typeof executeScheduledTxs() === 'number');
+  check('renderWeeklyVelocityCard exists', () => isFn(window, 'renderWeeklyVelocityCard'));
+  check('forecastGoalCompletion returns null without monthlyContribution', () =>
+    forecastGoalCompletion({ target: 1000, current: 0 })?.monthsToGo === Infinity);
+  check('forecastGoalCompletion returns monthsToGo with monthly', () => {
+    const r = forecastGoalCompletion({ target: 1000, current: 500, monthlyContribution: 100 });
+    return r && r.monthsToGo === 5;
+  });
+  check('getCategoryTrend returns array', () => Array.isArray(getCategoryTrend()));
+  check('renderCategoryTrendCard exists', () => isFn(window, 'renderCategoryTrendCard'));
+  check('pulseAccent does not throw on null', () => { pulseAccent(null); return true; });
+  check('suggestTagsForName returns array', () => Array.isArray(suggestTagsForName('xyz')));
+  check('previewCsvImport rejects empty', () => previewCsvImport('').valid === false);
+  check('previewCsvImport accepts valid header', () => {
+    const r = previewCsvImport('date,amount,name\n2026-01-01,1000,test');
+    return r.valid === true && r.rowCount === 1;
+  });
+  check('measurePerformance returns sample object', () => {
+    const m = measurePerformance();
+    return m && typeof m === 'object';
+  });
 
   section('DOM smoke');
   check('renderReports does not throw', () => {

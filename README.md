@@ -2,7 +2,12 @@
 
 Aplikasi keuangan pribadi yang mengikuti **Apple Human Interface Guidelines (HIG)**. Offline-first, zero install, sangat customizable. Bisa dipakai sebagai web app, PWA, atau native Android APK (via Capacitor).
 
-![DuitKu](https://img.shields.io/badge/version-2.0.0-34c759) ![Offline](https://img.shields.io/badge/offline-first-007aff) ![PWA](https://img.shields.io/badge/PWA-ready-af52de) ![Capacitor](https://img.shields.io/badge/Capacitor-Android-ff9500)
+![DuitKu](https://img.shields.io/badge/version-2.6.0-34c759) ![Offline](https://img.shields.io/badge/offline-first-007aff) ![PWA](https://img.shields.io/badge/PWA-ready-af52de) ![Capacitor](https://img.shields.io/badge/Capacitor-Android-ff9500) ![Smoke](https://img.shields.io/badge/smoke-131%2F131-2cb674) ![Tests](https://img.shields.io/badge/E2E-110%2F110-2cb674) ![License](https://img.shields.io/badge/license-personal-aaa)
+
+🌐 **Live:** https://cena135.github.io/duitku/ (PWA installable from browser)
+📥 **APK:** [DuitKu-debug.apk](./DuitKu-debug.apk) (3.8 MB)
+📝 **Changelog:** [CHANGELOG.md](./CHANGELOG.md) — 6 waste-rounds shipped
+🏗️ **Architecture:** [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ## Struktur
 

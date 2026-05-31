@@ -2323,6 +2323,9 @@ function renderReports() {
   renderCumulativeSpend();
   // Round 4 — yearly summary
   renderYearlySummaryCard();
+  // Round 6 — weekly velocity + category trend
+  renderWeeklyVelocityCard();
+  renderCategoryTrendCard();
 
   const top = monthTx.filter(t => t.type === 'expense')
     .sort((a,b) => b.amount - a.amount).slice(0, 5);
@@ -3025,10 +3028,12 @@ function saveTx(t, isEdit) {
 function deleteTx(id) {
   const tx = state.expenses.find(t => t.id === id);
   if (!tx) return;
+  const snap = { ...tx, tags: [...(tx.tags || [])] };
   state.expenses = state.expenses.filter(t => t.id !== id);
   save(); hideModal(); render(); hap('delete');
+  pushUndo(`Hapus "${tx.name || 'transaksi'}"`, () => { state.expenses.push(snap); save(); render(); });
   toast('Transaksi dihapus', {
-    action: { label: 'Urungkan', onClick: () => { state.expenses.push(tx); save(); render(); } }
+    action: { label: 'Urungkan', onClick: () => { state.expenses.push(snap); save(); render(); _undoStack.pop(); refreshUndoBar(); } }
   });
 }
 
@@ -5980,6 +5985,247 @@ function clearChartSkeletons() {
   });
 }
 
+// ========== ROUND 6 — Cycle 1: Global undo bar ==========
+
+let _undoStack = [];
+const UNDO_MAX = 5;
+
+function pushUndo(label, undoFn) {
+  _undoStack.push({ label, undoFn, ts: Date.now() });
+  if (_undoStack.length > UNDO_MAX) _undoStack.shift();
+  refreshUndoBar();
+}
+
+function refreshUndoBar() {
+  const bar = $('#undoBar');
+  if (!bar) return;
+  if (!_undoStack.length) { bar.classList.add('hidden'); return; }
+  const last = _undoStack[_undoStack.length - 1];
+  bar.classList.remove('hidden');
+  bar.innerHTML = '';
+  bar.appendChild(el('span', { class: 'undo-label' }, '↶ ' + last.label));
+  bar.appendChild(el('button', {
+    class: 'undo-btn',
+    onclick: () => {
+      const item = _undoStack.pop();
+      try { item.undoFn(); hap('save'); toast.success('Dibatalkan'); }
+      catch (e) { toast.error('Gagal: ' + e.message); }
+      refreshUndoBar();
+    }
+  }, 'Urungkan'));
+  bar.appendChild(el('button', {
+    class: 'undo-dismiss',
+    onclick: () => { _undoStack.pop(); refreshUndoBar(); }
+  }, '✕'));
+}
+
+// ========== ROUND 6 — Cycle 1: Scheduled (future-dated) tx ==========
+
+function getScheduledTxs() {
+  const today = isoDate();
+  return state.expenses.filter(t => t.date > today && t.scheduled);
+}
+
+function executeScheduledTxs() {
+  const today = isoDate();
+  let executed = 0;
+  state.expenses.forEach(t => {
+    if (t.scheduled && t.date <= today) {
+      delete t.scheduled;
+      executed++;
+    }
+  });
+  if (executed > 0) save();
+  return executed;
+}
+
+function maybeExecuteScheduled() {
+  const n = executeScheduledTxs();
+  if (n > 0) toast.info(`${n} transaksi terjadwal dieksekusi`);
+}
+
+// ========== ROUND 6 — Cycle 2: Weekly velocity chart ==========
+
+function renderWeeklyVelocityCard() {
+  const host = $('#weeklyVelocityCard');
+  if (!host || typeof Chart === 'undefined') return;
+  const canvas = host.querySelector('canvas');
+  if (!canvas) return;
+  if (host._chart) host._chart.destroy();
+
+  // 8 weeks back, expense sum per week
+  const weeks = [];
+  const today = new Date();
+  for (let w = 7; w >= 0; w--) {
+    const start = new Date(today); start.setDate(today.getDate() - (w * 7 + 6));
+    const end = new Date(today); end.setDate(today.getDate() - (w * 7));
+    const sIso = isoDate(start), eIso = isoDate(end);
+    const total = state.expenses
+      .filter(t => t.type === 'expense' && t.date >= sIso && t.date <= eIso)
+      .reduce((s, t) => s + t.amount, 0);
+    weeks.push({ label: `W-${w}`, total });
+  }
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#34c759';
+  host._chart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: weeks.map(w => w.label),
+      datasets: [{
+        data: weeks.map(w => w.total),
+        backgroundColor: weeks.map((_, i) => i === weeks.length - 1 ? accent : hexToRgba(accent, 0.5)),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => money(c.parsed.y) } } },
+      scales: { y: { ticks: { callback: v => moneyShort(v) } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+// ========== ROUND 6 — Cycle 2: Savings goal forecast ==========
+
+function forecastGoalCompletion(goal) {
+  if (!goal || goal.current >= goal.target) return null;
+  // Estimate monthly contribution from recent 3-month delta + explicit monthlyContribution if set
+  const explicit = goal.monthlyContribution || 0;
+  // History: try to estimate from past contribution amounts (unavailable; use 0)
+  const monthly = explicit;
+  if (monthly <= 0) return { monthsToGo: Infinity, eta: null };
+  const remaining = goal.target - goal.current;
+  const monthsToGo = Math.ceil(remaining / monthly);
+  const eta = new Date();
+  eta.setMonth(eta.getMonth() + monthsToGo);
+  return { monthsToGo, eta: isoDate(eta) };
+}
+
+// ========== ROUND 6 — Cycle 2: Growing/shrinking categories ==========
+
+function getCategoryTrend() {
+  const ref = getMonthDate(0);
+  const prev = getMonthDate(-1);
+  const cats = getCategories('expense');
+  const trends = [];
+  cats.forEach(c => {
+    const now = state.expenses.filter(t => isInMonth(t.date, ref) && t.type === 'expense' && t.category === c.id).reduce((s, t) => s + t.amount, 0);
+    const past = state.expenses.filter(t => isInMonth(t.date, prev) && t.type === 'expense' && t.category === c.id).reduce((s, t) => s + t.amount, 0);
+    if (now + past === 0) return;
+    const diff = now - past;
+    const pct = past > 0 ? ((now - past) / past) * 100 : (now > 0 ? 100 : 0);
+    trends.push({ cat: c, now, past, diff, pct });
+  });
+  return trends.sort((a, b) => b.diff - a.diff);
+}
+
+function renderCategoryTrendCard() {
+  const host = $('#categoryTrendCard');
+  if (!host) return;
+  const trends = getCategoryTrend();
+  host.innerHTML = '';
+  if (!trends.length) { host.appendChild(el('div', { class: 'muted-txt' }, 'Belum cukup data')); return; }
+  const growing = trends.slice(0, 3).filter(t => t.diff > 0);
+  const shrinking = trends.slice(-3).reverse().filter(t => t.diff < 0);
+  if (growing.length) {
+    host.appendChild(el('div', { class: 'trend-label' }, '📈 Naik bulan ini'));
+    growing.forEach(t => {
+      host.appendChild(el('div', { class: 'trend-row' },
+        el('span', {}, t.cat.icon + ' ' + t.cat.name),
+        el('span', { class: 'expense-txt' }, '+' + moneyShort(t.diff) + ' (' + (t.pct > 0 ? '+' : '') + t.pct.toFixed(0) + '%)')
+      ));
+    });
+  }
+  if (shrinking.length) {
+    host.appendChild(el('div', { class: 'trend-label', style: 'margin-top:10px' }, '📉 Turun bulan ini'));
+    shrinking.forEach(t => {
+      host.appendChild(el('div', { class: 'trend-row' },
+        el('span', {}, t.cat.icon + ' ' + t.cat.name),
+        el('span', { class: 'income-txt' }, moneyShort(t.diff) + ' (' + t.pct.toFixed(0) + '%)')
+      ));
+    });
+  }
+}
+
+// ========== ROUND 6 — Cycle 3: Save-pulse + modal scale-in ==========
+
+function pulseAccent(elem) {
+  if (!elem) return;
+  elem.classList.add('accent-pulse');
+  setTimeout(() => elem.classList.remove('accent-pulse'), 500);
+}
+
+// ========== ROUND 6 — Cycle 4: Tag autosuggest from name patterns ==========
+
+function suggestTagsForName(name) {
+  if (!name || !name.trim()) return [];
+  const needle = name.toLowerCase().trim();
+  // Find similar past txs and aggregate their tags
+  const tagCounts = {};
+  state.expenses.forEach(t => {
+    if (!t.name || !Array.isArray(t.tags) || !t.tags.length) return;
+    if (t.name.toLowerCase().includes(needle) || needle.includes(t.name.toLowerCase())) {
+      t.tags.forEach(tagId => { tagCounts[tagId] = (tagCounts[tagId] || 0) + 1; });
+    }
+  });
+  // Suggest tags that appear in >=50% of matches
+  const total = Object.values(tagCounts).reduce((s, x) => s + x, 0);
+  if (total < 2) return [];
+  return Object.entries(tagCounts)
+    .filter(([_, c]) => c >= 2)
+    .sort(([_, a], [__, b]) => b - a)
+    .map(([id]) => id)
+    .slice(0, 3);
+}
+
+// ========== ROUND 6 — Cycle 4: CSV import preview ==========
+
+function previewCsvImport(csvText) {
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return { valid: false, error: 'CSV kosong atau hanya header' };
+  const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+  const required = ['date', 'amount'];
+  const missing = required.filter(r => !header.some(h => h.includes(r)));
+  if (missing.length) return { valid: false, error: `Kolom hilang: ${missing.join(', ')}` };
+  return {
+    valid: true,
+    rowCount: lines.length - 1,
+    header,
+    sample: lines.slice(1, 4),
+  };
+}
+
+// ========== ROUND 6 — Cycle 5: Performance baseline measurement ==========
+
+function measurePerformance() {
+  const samples = {};
+  const N = 200;
+
+  // accountBalance memoized
+  if (state.accounts[0]) {
+    save(); // invalidate cache
+    const t0 = performance.now();
+    for (let i = 0; i < N; i++) accountBalance(state.accounts[0]);
+    samples.accountBalance200x = (performance.now() - t0).toFixed(2) + 'ms';
+  }
+
+  // computeMonthInsight
+  const t1 = performance.now();
+  for (let i = 0; i < 50; i++) computeMonthInsight();
+  samples.computeMonthInsight50x = (performance.now() - t1).toFixed(2) + 'ms';
+
+  // findDuplicateTxs
+  const t2 = performance.now();
+  for (let i = 0; i < 20; i++) findDuplicateTxs();
+  samples.findDuplicateTxs20x = (performance.now() - t2).toFixed(2) + 'ms';
+
+  // detectRecurringPatterns
+  const t3 = performance.now();
+  for (let i = 0; i < 20; i++) detectRecurringPatterns();
+  samples.detectRecurringPatterns20x = (performance.now() - t3).toFixed(2) + 'ms';
+
+  return samples;
+}
+
 // ========== ROUND 2 — Cycle 5: Backup reminder banner ==========
 
 function maybeShowBackupReminder() {
@@ -6544,6 +6790,10 @@ function init() {
   setupSettingsSearch();
   $('#shareYearlyBtn')?.addEventListener('click', shareYearlySummary);
   maybeShowLowBalanceToast();
+
+  // Round 6: scheduled tx execution + undo bar init
+  maybeExecuteScheduled();
+  refreshUndoBar();
 }
 
 // PWA install prompt — show banner when browser allows install

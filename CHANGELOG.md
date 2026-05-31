@@ -1,5 +1,17 @@
 # DuitKu — Changelog
 
+## Round 6 (2026-06-01)
+- Global undo bar (sticky bottom pill, last 5 destructive actions, undo with one tap)
+- Scheduled (future-dated) transactions — `t.scheduled = true` flag, auto-execute when date reached
+- Weekly velocity chart (8-week bar, current week highlighted)
+- Savings goal forecast helper (`forecastGoalCompletion` — months-to-target from explicit monthlyContribution)
+- Category trend card (top growing + shrinking categories MoM with % change)
+- Tag autosuggest from name patterns (suggests tags from similar past tx names)
+- CSV import preview (validates header before commit, shows 3-row sample)
+- Performance baseline measurement (`measurePerformance` — accountBalance/insight/dup/recurring timings)
+- Accent pulse animation helper for save buttons
+- `deleteTx` now wired into undo stack
+
 ## Round 5 (2026-06-01)
 - Settings search bar (live filter cells by query)
 - Category drilldown modal (helper `openCategoryDrilldown(catId, type)`)
