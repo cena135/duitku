@@ -503,6 +503,8 @@ function buildCategoryPicker(type, getCurrent, onChange) {
       tabindex: '0', role: 'radio',
       'aria-checked': getCurrent() === c.id ? 'true' : 'false',
       'aria-label': c.name,
+      'data-cat-id': c.id,
+      'data-cat-type': type,
       onclick: () => { onChange(c.id); haptic(5); refresh(); }
     }, el('div', { class: 'ic' }, c.icon), c.name));
   });
@@ -2009,6 +2011,8 @@ function renderSubscription() {
   $('#subActive').textContent  = active.length;
 
   renderSubCalendar();
+  // Round 7: renewal grid 3 months
+  renderSubRenewalGrid();
 
   const list = $('#subList');
   list.innerHTML = '';
@@ -2330,6 +2334,8 @@ function renderReports() {
   renderCategoryTrendCard();
   // Round 7 — weekend vs weekday
   renderWeekendWeekdayCard();
+  // Round 7 — chart ripple + pie drilldown (wire after canvases exist)
+  setTimeout(() => { setupChartRipple(); setupPieDrilldown(); }, 50);
 
   const top = monthTx.filter(t => t.type === 'expense')
     .sort((a,b) => b.amount - a.amount).slice(0, 5);
@@ -2915,6 +2921,7 @@ function openExpenseModal(tx = null) {
 
       // Name + date — name has smart category suggestion + tag autocomplete
       const nameWrap = el('div', { class: 'tag-autocomplete' });
+      const findSimilarPanel = buildFindSimilarPanel(t);
       const nameInput = el('input', { type: 'text', placeholder: 'Misal: Indomie goreng',
         value: t.name || '', 'data-field': 'name', autocomplete: 'off',
         oninput: (e) => {
@@ -2929,10 +2936,15 @@ function openExpenseModal(tx = null) {
           }
           // Tag autocomplete — show matching tags
           renderTagAutocomplete(e.target.value, t);
+          // Round 7: find similar tx panel
+          findSimilarPanel.refresh(e.target.value);
         } });
       const acList = el('div', { class: 'tag-autocomplete-list', id: 'tagAutocompleteList' });
       nameWrap.appendChild(nameInput);
       nameWrap.appendChild(acList);
+      nameWrap.appendChild(findSimilarPanel);
+      // Round 7: trigger initial refresh in case editing existing tx
+      if (t.name) setTimeout(() => findSimilarPanel.refresh(t.name), 100);
 
       body.appendChild(el('div', { class: 'field-row' },
         formField('Nama', nameWrap),
@@ -6510,6 +6522,199 @@ function auditFocusOrder() {
   return { focusableCount: focusable.length, issues };
 }
 
+// ========== ROUND 7 — Cycle 2: Sub renewal grid (3 months) ==========
+
+function computeSubRenewalGrid(monthsAhead = 3) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const cutoff = new Date(today); cutoff.setMonth(cutoff.getMonth() + monthsAhead);
+  const cutoffISO = isoDate(cutoff);
+  const byDate = {};
+  state.subscriptions.filter(s => s.active !== false).forEach(s => {
+    let next = s.nextRenewal;
+    const safety = 24;
+    let iters = 0;
+    while (next && next <= cutoffISO && iters < safety) {
+      if (next >= isoDate(today)) {
+        (byDate[next] = byDate[next] || []).push(s);
+      }
+      // Advance to next renewal locally (don't mutate state)
+      const d = new Date(next);
+      if (s.cycle === 'weekly') d.setDate(d.getDate() + 7);
+      else if (s.cycle === 'biweekly') d.setDate(d.getDate() + 14);
+      else if (s.cycle === 'monthly') d.setMonth(d.getMonth() + 1);
+      else if (s.cycle === 'quarterly') d.setMonth(d.getMonth() + 3);
+      else if (s.cycle === 'yearly') d.setFullYear(d.getFullYear() + 1);
+      else break;
+      next = isoDate(d);
+      iters++;
+    }
+  });
+  return byDate;
+}
+
+function renderSubRenewalGrid() {
+  const host = $('#subRenewalGrid');
+  if (!host) return;
+  const grid = computeSubRenewalGrid(3);
+  host.innerHTML = '';
+  const sorted = Object.keys(grid).sort();
+  if (!sorted.length) {
+    host.appendChild(el('div', { class: 'muted-txt' }, 'Tidak ada renewal dalam 3 bulan ke depan'));
+    return;
+  }
+  let totalOut = 0;
+  sorted.forEach(date => {
+    const subs = grid[date];
+    const dayTotal = subs.filter(s => s.type !== 'income').reduce((s, sub) => s + sub.amount, 0);
+    const dayIn = subs.filter(s => s.type === 'income').reduce((s, sub) => s + sub.amount, 0);
+    totalOut += dayTotal;
+    const row = el('div', { class: 'sub-grid-row' },
+      el('div', { class: 'sub-grid-date' }, shortDate(date)),
+      el('div', { class: 'sub-grid-items' },
+        ...subs.map(s => el('span', { class: 'sub-grid-chip' + (s.type === 'income' ? ' inc' : '') },
+          s.name + ' ' + moneyTiny(s.amount)))
+      ),
+      dayTotal > 0 ? el('div', { class: 'sub-grid-total expense-txt' }, '−' + moneyShort(dayTotal)) : null,
+      dayIn > 0 ? el('div', { class: 'sub-grid-total income-txt' }, '+' + moneyShort(dayIn)) : null,
+    );
+    host.appendChild(row);
+  });
+  host.appendChild(el('div', { class: 'sub-grid-footer' },
+    el('span', {}, `Total 3 bulan: `),
+    el('strong', { class: 'expense-txt' }, money(totalOut))
+  ));
+}
+
+// ========== ROUND 7 — Cycle 4: Find-similar panel in expense modal ==========
+
+function buildFindSimilarPanel(t) {
+  const wrap = el('div', { class: 'find-similar-panel hidden' });
+  function refresh(currentName) {
+    const sims = findSimilarTxs({ ...t, name: currentName }, 3);
+    wrap.innerHTML = '';
+    if (!sims.length) { wrap.classList.add('hidden'); return; }
+    // Aggregate most-used category from similar
+    const catCounts = {};
+    sims.forEach(s => { if (s.category) catCounts[s.category] = (catCounts[s.category] || 0) + 1; });
+    const topCat = Object.entries(catCounts).sort(([_, a], [__, b]) => b - a)[0];
+    wrap.classList.remove('hidden');
+    wrap.appendChild(el('div', { class: 'fs-label' },
+      `${sims.length} tx mirip — rata-rata ${moneyShort(sims.reduce((s, x) => s + x.amount, 0) / sims.length)}`));
+    sims.forEach(s => {
+      wrap.appendChild(el('button', {
+        type: 'button', class: 'fs-row',
+        onclick: () => {
+          t.amount = s.amount;
+          if (s.category) t.category = s.category;
+          if (s.tags && s.tags.length) t.tags = [...new Set([...(t.tags || []), ...s.tags])];
+          hap('select');
+          toast.info('Disalin dari tx mirip');
+          // Re-render the modal so values update
+          hideModal();
+          setTimeout(() => openExpenseModal(t.id ? state.expenses.find(x => x.id === t.id) : t), 50);
+        }
+      },
+        el('span', { class: 'fs-name' }, s.name || '—'),
+        el('span', { class: 'fs-meta muted-txt' }, money(s.amount) + ' · ' + shortDate(s.date))
+      ));
+    });
+  }
+  wrap.refresh = refresh;
+  return wrap;
+}
+
+// ========== ROUND 7 — Cycle 5: A11y audit modal ==========
+
+function openA11yAuditModal() {
+  hap('navigate');
+  const r = auditFocusOrder();
+  const body = el('div', { class: 'a11y-audit-body' });
+  body.appendChild(el('div', { class: 'a11y-stat' },
+    el('div', { class: 'a11y-stat-num' }, String(r.focusableCount)),
+    el('div', { class: 'a11y-stat-label muted-txt' }, 'elemen fokus terdeteksi')
+  ));
+  if (!r.issues.length) {
+    body.appendChild(el('div', { class: 'a11y-good' }, '✅ Tidak ada masalah focus order ditemukan'));
+  } else {
+    body.appendChild(el('div', { class: 'a11y-label', style: 'margin-top:12px' },
+      `${r.issues.length} masalah terdeteksi:`));
+    r.issues.forEach(i => {
+      body.appendChild(el('div', { class: 'a11y-issue' },
+        el('div', { class: 'a11y-issue-el' }, i.el + ' (#' + i.idx + ')'),
+        el('div', { class: 'a11y-issue-reason muted-txt' }, i.reason)
+      ));
+    });
+  }
+  showModal({ title: 'Audit Aksesibilitas', body, save: null });
+}
+
+// ========== ROUND 7 — Cycle 3: Chart segment ripple ==========
+
+function setupChartRipple() {
+  // Listen for click on chart canvases and emit a quick ripple
+  document.querySelectorAll('canvas').forEach(c => {
+    if (c._rippleBound) return;
+    c._rippleBound = true;
+    c.addEventListener('click', (e) => {
+      const rect = c.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const ripple = el('div', { class: 'chart-ripple' });
+      ripple.style.left = x + 'px';
+      ripple.style.top = y + 'px';
+      const parent = c.parentElement;
+      if (!parent) return;
+      const wasPos = getComputedStyle(parent).position;
+      if (wasPos === 'static') parent.style.position = 'relative';
+      parent.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 600);
+    });
+  });
+}
+
+// ========== ROUND 7 — Cycle 1: Long-press category to rename (wired) ==========
+
+function setupCategoryLongPressRename() {
+  let timer = null;
+  document.addEventListener('touchstart', start, { passive: true });
+  document.addEventListener('mousedown', start);
+  document.addEventListener('touchend', cancel);
+  document.addEventListener('mouseup', cancel);
+  document.addEventListener('touchcancel', cancel);
+  document.addEventListener('mouseleave', cancel);
+
+  function start(e) {
+    const cell = e.target.closest('[data-cat-id][data-cat-type]');
+    if (!cell) return;
+    const catId = cell.dataset.catId;
+    const type = cell.dataset.catType;
+    timer = setTimeout(() => {
+      hap('longPress');
+      renameCategoryInline(type, catId);
+    }, 600);
+  }
+  function cancel() { if (timer) { clearTimeout(timer); timer = null; } }
+}
+
+// ========== ROUND 7 — Pie click → drilldown (wired) ==========
+
+function setupPieDrilldown() {
+  const canvas = document.querySelector('#chartPie, [data-pie="true"]');
+  if (!canvas || !pieChart) return;
+  if (canvas._drilldownBound) return;
+  canvas._drilldownBound = true;
+  canvas.addEventListener('click', (e) => {
+    const elems = pieChart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+    if (!elems.length) return;
+    const idx = elems[0].index;
+    const label = pieChart.data.labels[idx];
+    // Find category id by name
+    const cat = getCategories('expense').find(c => c.name === label || (c.icon + ' ' + c.name) === label);
+    if (cat) openCategoryDrilldown(cat.id, 'expense');
+  });
+}
+
 // ========== ROUND 2 — Cycle 5: Backup reminder banner ==========
 
 function maybeShowBackupReminder() {
@@ -6981,6 +7186,10 @@ function init() {
   $('#cellBudgetRec')?.addEventListener('click', openBudgetRecommendationModal);
   $('#cellPriceChange')?.addEventListener('click', openSubPriceChangeModal);
   $('#cellTagMerge')?.addEventListener('click', openTagMergeModal);
+  $('#cellA11yAudit')?.addEventListener('click', openA11yAuditModal);
+
+  // Round 7: wire long-press category rename + chart ripple
+  setupCategoryLongPressRename();
 
   // Round 4: A11y toggles
   const hcInput = $('#toggleHighContrast');

@@ -3227,3 +3227,67 @@ html.a11y-larger-text input, html.a11y-larger-text button { font-size: 16px; }
   from { opacity: 0; transform: scale(.7); }
   to { opacity: 1; transform: scale(1); }
 }
+
+/* Round 7 — sub renewal grid */
+.sub-grid-card { margin: 12px 0; }
+.sub-grid-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; background: var(--fill-1);
+  border: 1px solid var(--separator); border-radius: 10px;
+  margin-bottom: 6px;
+}
+.sub-grid-date { font-size: 12px; color: var(--label-2); white-space: nowrap; min-width: 64px; }
+.sub-grid-items { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.sub-grid-chip {
+  font-size: 11px; background: var(--fill-2); padding: 3px 8px;
+  border-radius: 8px; color: var(--label-1); white-space: nowrap;
+}
+.sub-grid-chip.inc { background: color-mix(in srgb, var(--income) 18%, var(--fill-2)); color: var(--income); }
+.sub-grid-total { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.sub-grid-footer {
+  margin-top: 10px; padding: 10px 12px; text-align: right;
+  font-size: 13px; color: var(--label-2);
+}
+
+/* Round 7 — find similar panel */
+.find-similar-panel {
+  margin-top: 8px; padding: 10px; background: var(--fill-2);
+  border-radius: 10px; display: flex; flex-direction: column; gap: 4px;
+}
+.find-similar-panel.hidden { display: none; }
+.fs-label { font-size: 12px; color: var(--label-2); margin-bottom: 2px; }
+.fs-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 8px; background: var(--fill-1); border: none; border-radius: 8px;
+  cursor: pointer; font-size: 13px; color: var(--label-1); text-align: left; width: 100%;
+}
+.fs-row:hover { background: var(--fill-3); }
+.fs-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+.fs-meta { font-size: 11px; }
+
+/* Round 7 — a11y audit modal */
+.a11y-audit-body { display: flex; flex-direction: column; gap: 10px; }
+.a11y-stat { text-align: center; padding: 16px; background: var(--fill-2); border-radius: 12px; }
+.a11y-stat-num { font-size: 32px; font-weight: 700; color: var(--accent); }
+.a11y-stat-label { font-size: 13px; margin-top: 4px; }
+.a11y-good { text-align: center; padding: 16px; color: var(--income); font-size: 14px; }
+.a11y-label { font-size: 12px; color: var(--label-2); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.a11y-issue {
+  padding: 8px 12px; background: var(--fill-1); border: 1px solid var(--separator);
+  border-radius: 8px;
+}
+.a11y-issue-el { font-family: monospace; font-size: 12px; color: var(--label-1); }
+.a11y-issue-reason { font-size: 12px; margin-top: 2px; }
+
+/* Round 7 — chart ripple */
+.chart-ripple {
+  position: absolute; width: 4px; height: 4px;
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 50%; transform: translate(-50%, -50%) scale(1);
+  pointer-events: none; opacity: 1;
+  animation: chart-ripple-kf .6s ease-out forwards;
+}
+@keyframes chart-ripple-kf {
+  0% { transform: translate(-50%,-50%) scale(1); opacity: .6; }
+  100% { transform: translate(-50%,-50%) scale(60); opacity: 0; }
+}

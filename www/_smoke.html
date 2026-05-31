@@ -316,6 +316,23 @@
     return r && typeof r.focusableCount === 'number' && Array.isArray(r.issues);
   });
 
+  section('ROUND 7 wire-up — sub-renewal-grid / find-similar / a11y modal / ripple / pie drill / cat long-press');
+  check('computeSubRenewalGrid returns object', () => typeof computeSubRenewalGrid(3) === 'object');
+  check('renderSubRenewalGrid exists', () => isFn(window, 'renderSubRenewalGrid'));
+  check('buildFindSimilarPanel returns element with refresh()', () => {
+    const p = buildFindSimilarPanel({ name: 'x', type: 'expense', id: 'fake' });
+    return p && typeof p.refresh === 'function';
+  });
+  check('openA11yAuditModal exists', () => isFn(window, 'openA11yAuditModal'));
+  check('setupChartRipple exists', () => isFn(window, 'setupChartRipple'));
+  check('setupPieDrilldown exists', () => isFn(window, 'setupPieDrilldown'));
+  check('setupCategoryLongPressRename exists', () => isFn(window, 'setupCategoryLongPressRename'));
+  check('cat-tile has data-cat-id + data-cat-type attrs', () => {
+    const grid = buildCategoryPicker('expense', () => 'food', () => {});
+    const t = grid.querySelector('.cat-tile');
+    return t && t.dataset.catId && t.dataset.catType === 'expense';
+  });
+
   section('DOM smoke');
   check('renderReports does not throw', () => {
     try { renderReports(); } catch (e) {}

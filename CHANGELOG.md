@@ -1,16 +1,18 @@
 # DuitKu — Changelog
 
 ## Round 7 (2026-06-01)
-- Sub context menu: "Lewati Renewal Ini" (skip one renewal cycle)
-- Inline category rename helper (`renameCategoryInline`)
+- Sub context menu: "Lewati Renewal Ini" (skip one renewal cycle, undoable)
+- Inline category rename — **wired** via long-press on category tile in expense modal
 - Tag merge tool (Settings → Gabung Tag, picks source + target)
 - Weekend vs Weekday breakdown card di Reports (+ ratio)
-- Account share helper (`renderAccountSharePieData`)
+- Subscription renewal grid 3 bulan ke depan (di Langganan view, daily list dengan total)
 - Subscription price-change detection (Settings → Perubahan Harga Langganan)
-- `findSimilarTxs` helper untuk modal-side suggestions
-- Quick-pay debt action (debt context menu → "Bayar Cepat" → amount/account dialog)
+- Find-similar tx panel — **wired** into expense modal (live updates as user types name; tap row to copy amount/category/tags)
+- Quick-pay debt action (debt context menu → "Bayar Cepat")
 - Heart-burst celebration animation (alt to confetti)
-- A11y focus order audit helper (`auditFocusOrder`)
+- A11y focus audit — **wired** to Settings cell "Audit Aksesibilitas" (live count + flagged issues)
+- Pie chart click → category drilldown (round 5 helper, now wired)
+- Chart segment ripple animation on click (all canvases)
 
 ## Round 6 (2026-06-01)
 - Global undo bar (sticky bottom pill, last 5 destructive actions, undo with one tap)
