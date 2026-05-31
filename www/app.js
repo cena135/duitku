@@ -182,6 +182,9 @@ let ui = {
   debtFilter: 'all',
   selectedCalDay: null,
   currentModalSave: null,
+  advFilter: { amountMin: null, amountMax: null, dateFrom: '', dateTo: '', accounts: [], tags: [] },
+  recentSearches: [],          // last 5 unique queries from command palette
+  bulkSelected: new Set(),     // ids of tx selected in bulk mode
 };
 let pieChart = null;
 let lineChart = null;
@@ -1413,6 +1416,8 @@ function renderExpense() {
   if (ui.tagFilter !== 'all') {
     txs = txs.filter(t => Array.isArray(t.tags) && t.tags.includes(ui.tagFilter));
   }
+  txs = applyAdvFilter(txs);
+  refreshAdvFilterBadge();
 
   const q = ui.searchQuery.trim().toLowerCase();
   if (q) {
@@ -1672,16 +1677,19 @@ function openAccountContextMenu(a) {
 
 function openTxContextMenu(tx) {
   const title = tx.name || (tx.type === 'transfer' ? 'Transfer' : getCategory(tx.type, tx.category).name);
-  openActionSheet(title + ' — ' + money(tx.amount), [
+  const actions = [
     { label: 'Edit', icon: '✏️',
       onClick: () => tx.type === 'transfer' ? openTransferModal(tx) : openExpenseModal(tx) },
     { label: 'Duplikat ke hari ini', icon: '📋',
       onClick: () => duplicateTx(tx) },
     { label: 'Pilih beberapa…', icon: '☑️',
       onClick: () => enterBulkMode(tx.id) },
-    { label: 'Hapus', icon: '🗑️', destructive: true,
-      onClick: () => deleteTx(tx.id) },
-  ]);
+  ];
+  if (tx.type !== 'transfer') {
+    actions.push({ label: 'Simpan sebagai template', icon: '⭐', onClick: () => saveTxAsTemplate(tx) });
+  }
+  actions.push({ label: 'Hapus', icon: '🗑️', destructive: true, onClick: () => deleteTx(tx.id) });
+  openActionSheet(title + ' — ' + money(tx.amount), actions);
 }
 
 // ============================================================
@@ -2275,6 +2283,11 @@ function renderReports() {
 
   // Subscription cost forecast (next 3 months)
   renderSubForecast();
+
+  // Round 2 — Cycle 2 analytics expansions
+  renderSavingsRateTrend();
+  renderTopExpensesEver();
+  renderProjectedMonthEnd();
 
   const top = monthTx.filter(t => t.type === 'expense')
     .sort((a,b) => b.amount - a.amount).slice(0, 5);
@@ -4642,6 +4655,565 @@ function maybeAutoUnpauseSubs() {
   if (unpaused > 0) { save(); toast.info(`${unpaused} langganan otomatis aktif lagi`); }
 }
 
+// ========== ROUND 2 — Cycle 1: Advanced filter + command palette ==========
+
+function countActiveAdvFilters() {
+  const a = ui.advFilter;
+  let n = 0;
+  if (a.amountMin != null || a.amountMax != null) n++;
+  if (a.dateFrom || a.dateTo) n++;
+  if (a.accounts.length) n++;
+  if (a.tags.length) n++;
+  return n;
+}
+
+function applyAdvFilter(txs) {
+  const a = ui.advFilter;
+  if (a.amountMin != null) txs = txs.filter(t => t.amount >= a.amountMin);
+  if (a.amountMax != null) txs = txs.filter(t => t.amount <= a.amountMax);
+  if (a.dateFrom) txs = txs.filter(t => t.date >= a.dateFrom);
+  if (a.dateTo) txs = txs.filter(t => t.date <= a.dateTo);
+  if (a.accounts.length) txs = txs.filter(t =>
+    a.accounts.includes(t.accountId) || a.accounts.includes(t.fromAccountId) || a.accounts.includes(t.toAccountId));
+  if (a.tags.length) txs = txs.filter(t => Array.isArray(t.tags) && t.tags.some(id => a.tags.includes(id)));
+  return txs;
+}
+
+function resetAdvFilter() {
+  ui.advFilter = { amountMin: null, amountMax: null, dateFrom: '', dateTo: '', accounts: [], tags: [] };
+}
+
+function refreshAdvFilterBadge() {
+  const badge = $('#advFilterBadge');
+  if (!badge) return;
+  const n = countActiveAdvFilters();
+  badge.textContent = n;
+  badge.hidden = n === 0;
+  const btn = $('#advFilterBtn');
+  if (btn) btn.classList.toggle('has-filters', n > 0);
+}
+
+function openAdvancedFilterModal() {
+  hap('navigate');
+  const a = { ...ui.advFilter };
+  const accs = getAccounts();
+  const tagList = getTags();
+
+  const numInput = (placeholder, val) => el('input', { type: 'number', placeholder, value: val == null ? '' : val, inputmode: 'numeric' });
+  const dateInput = (val) => el('input', { type: 'date', value: val || '' });
+
+  const minIn = numInput('Min', a.amountMin);
+  const maxIn = numInput('Max', a.amountMax);
+  const fromIn = dateInput(a.dateFrom);
+  const toIn = dateInput(a.dateTo);
+
+  const accChips = el('div', { class: 'chip-multi' });
+  accs.forEach(acc => {
+    const sel = a.accounts.includes(acc.id);
+    const c = el('button', {
+      type: 'button',
+      class: 'chip-multi-item' + (sel ? ' active' : ''),
+      onclick: () => {
+        const idx = a.accounts.indexOf(acc.id);
+        if (idx >= 0) a.accounts.splice(idx, 1); else a.accounts.push(acc.id);
+        c.classList.toggle('active');
+        hap('toggle');
+      }
+    }, acc.name);
+    accChips.appendChild(c);
+  });
+
+  const tagChips = el('div', { class: 'chip-multi' });
+  if (tagList.length === 0) tagChips.appendChild(el('div', { class: 'muted-txt' }, 'Belum ada tag'));
+  tagList.forEach(tag => {
+    const sel = a.tags.includes(tag.id);
+    const c = el('button', {
+      type: 'button',
+      class: 'chip-multi-item' + (sel ? ' active' : ''),
+      style: `--chip-color:${tag.color || '#888'}`,
+      onclick: () => {
+        const idx = a.tags.indexOf(tag.id);
+        if (idx >= 0) a.tags.splice(idx, 1); else a.tags.push(tag.id);
+        c.classList.toggle('active');
+        hap('toggle');
+      }
+    }, '#' + tag.name);
+    tagChips.appendChild(c);
+  });
+
+  const body = el('div', { class: 'adv-filter-body' },
+    el('div', { class: 'field-group' },
+      el('label', {}, 'Jumlah (Rp)'),
+      el('div', { class: 'range-row' }, minIn, el('span', { class: 'muted-txt' }, '—'), maxIn)
+    ),
+    el('div', { class: 'field-group' },
+      el('label', {}, 'Tanggal'),
+      el('div', { class: 'range-row' }, fromIn, el('span', { class: 'muted-txt' }, '—'), toIn)
+    ),
+    el('div', { class: 'field-group' },
+      el('label', {}, 'Akun'),
+      accChips
+    ),
+    el('div', { class: 'field-group' },
+      el('label', {}, 'Tag'),
+      tagChips
+    ),
+    el('button', {
+      type: 'button',
+      class: 'btn-secondary full-wide',
+      style: 'margin-top: 12px',
+      onclick: () => {
+        resetAdvFilter();
+        hideModal();
+        refreshAdvFilterBadge();
+        renderExpense();
+        toast.info('Filter direset');
+      }
+    }, 'Reset semua filter')
+  );
+
+  showModal({
+    title: 'Filter Lanjutan',
+    body,
+    save: () => {
+      a.amountMin = minIn.value === '' ? null : Number(minIn.value);
+      a.amountMax = maxIn.value === '' ? null : Number(maxIn.value);
+      a.dateFrom = fromIn.value;
+      a.dateTo = toIn.value;
+      ui.advFilter = a;
+      hap('save');
+      refreshAdvFilterBadge();
+      renderExpense();
+    }
+  });
+}
+
+function pushRecentSearch(q) {
+  if (!q || !q.trim()) return;
+  q = q.trim();
+  ui.recentSearches = [q, ...ui.recentSearches.filter(s => s !== q)].slice(0, 5);
+}
+
+function openCommandPalette() {
+  hap('navigate');
+  const matches = el('div', { class: 'cmdp-results' });
+  const input = el('input', {
+    type: 'search', class: 'cmdp-input', autofocus: true,
+    placeholder: 'Cari semua transaksi... (>1000 jumlah, @akun, #tag)',
+  });
+  const recents = el('div', { class: 'cmdp-recents' });
+
+  function highlight(text, q) {
+    if (!q) return text;
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx < 0) return text;
+    return [
+      text.slice(0, idx),
+      el('mark', {}, text.slice(idx, idx + q.length)),
+      text.slice(idx + q.length),
+    ];
+  }
+
+  function renderRecents() {
+    recents.innerHTML = '';
+    if (!ui.recentSearches.length) return;
+    recents.appendChild(el('div', { class: 'cmdp-recent-label' }, 'Pencarian terakhir'));
+    ui.recentSearches.forEach(q => {
+      const chip = el('button', {
+        type: 'button', class: 'cmdp-recent-chip',
+        onclick: () => { input.value = q; input.dispatchEvent(new Event('input')); }
+      }, q);
+      recents.appendChild(chip);
+    });
+  }
+
+  function search(q) {
+    matches.innerHTML = '';
+    if (!q || q.length < 1) { renderRecents(); return; }
+    recents.innerHTML = '';
+    let txs = state.expenses.slice();
+
+    // Shortcut parsing
+    const amountMatch = q.match(/(?:^|\s)([><])(\d+(?:\.\d+)?)/);
+    const tagMatch = q.match(/#(\S+)/);
+    const acctMatch = q.match(/@(\S+)/);
+    let textQ = q.replace(/(?:^|\s)[><]\d+(?:\.\d+)?/g, '').replace(/#\S+/g, '').replace(/@\S+/g, '').trim();
+
+    if (amountMatch) {
+      const op = amountMatch[1], val = Number(amountMatch[2]);
+      txs = txs.filter(t => op === '>' ? t.amount > val : t.amount < val);
+    }
+    if (tagMatch) {
+      const tagQ = tagMatch[1].toLowerCase();
+      txs = txs.filter(t => (t.tags || []).some(id => getTag(id)?.name.toLowerCase().includes(tagQ)));
+    }
+    if (acctMatch) {
+      const accQ = acctMatch[1].toLowerCase();
+      txs = txs.filter(t => {
+        const a = getAccounts().find(x => x.id === t.accountId);
+        return a && a.name.toLowerCase().includes(accQ);
+      });
+    }
+    if (textQ) {
+      const ql = textQ.toLowerCase();
+      txs = txs.filter(t => (t.name || '').toLowerCase().includes(ql) || (t.note || '').toLowerCase().includes(ql));
+    }
+
+    txs = txs.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20);
+    if (txs.length === 0) {
+      matches.appendChild(el('div', { class: 'cmdp-empty' }, 'Tidak ada hasil'));
+      return;
+    }
+    txs.forEach(t => {
+      const cat = t.type !== 'transfer' ? getCategory(t.type, t.category) : { icon: '↔️', name: 'Transfer' };
+      const row = el('button', {
+        type: 'button', class: 'cmdp-result',
+        onclick: () => {
+          pushRecentSearch(q);
+          hideModal();
+          if (t.type !== 'transfer') openExpenseModal(t);
+        }
+      },
+        el('div', { class: 'cmdp-icon' }, cat.icon),
+        el('div', { class: 'cmdp-meta' },
+          el('div', { class: 'cmdp-title' }, highlight(t.name || cat.name, textQ)),
+          el('div', { class: 'cmdp-sub' }, shortDate(t.date) + ' · ' + money(t.amount))
+        )
+      );
+      matches.appendChild(row);
+    });
+  }
+
+  input.addEventListener('input', () => search(input.value));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      pushRecentSearch(input.value);
+      const first = matches.querySelector('.cmdp-result');
+      if (first) first.click();
+    }
+  });
+
+  const body = el('div', { class: 'cmdp-body' }, input, recents, matches);
+  showModal({ title: 'Cari Cepat', body, save: null });
+  renderRecents();
+  setTimeout(() => input.focus(), 50);
+}
+
+// ========== ROUND 2 — Cycle 3: Bulk-ops v2 ==========
+
+function bulkRecategorize() {
+  if (!ui.bulkSelected.size) return;
+  const ids = Array.from(ui.bulkSelected);
+  const txs = state.expenses.filter(t => ids.includes(t.id));
+  const types = new Set(txs.map(t => t.type));
+  if (types.size > 1 || types.has('transfer')) {
+    toast.warning('Pilih transaksi dengan jenis sama (bukan transfer)');
+    return;
+  }
+  const type = txs[0].type;
+  let chosen = txs[0].category;
+  const body = el('div', {}, buildCategoryPicker(type, () => chosen, (c) => { chosen = c; }));
+  showModal({
+    title: `Ganti kategori (${txs.length})`,
+    body,
+    save: () => {
+      txs.forEach(t => { t.category = chosen; });
+      save(); hap('save'); render();
+      toast.success(`${txs.length} transaksi dipindah kategori`);
+      ui.bulkSelected.clear();
+    }
+  });
+}
+
+function bulkMoveAccount() {
+  if (!ui.bulkSelected.size) return;
+  const ids = Array.from(ui.bulkSelected);
+  const txs = state.expenses.filter(t => ids.includes(t.id) && t.type !== 'transfer');
+  if (!txs.length) { toast.warning('Tidak ada transaksi yang bisa dipindah'); return; }
+  let chosen = txs[0].accountId;
+  const body = el('div', {}, buildAccountPicker(() => chosen, (id) => { chosen = id; }));
+  showModal({
+    title: `Pindahkan ke akun (${txs.length})`,
+    body,
+    save: () => {
+      txs.forEach(t => { t.accountId = chosen; });
+      save(); hap('save'); render();
+      toast.success(`${txs.length} transaksi dipindah akun`);
+      ui.bulkSelected.clear();
+    }
+  });
+}
+
+function bulkAddTag() {
+  if (!ui.bulkSelected.size) return;
+  const ids = Array.from(ui.bulkSelected);
+  const txs = state.expenses.filter(t => ids.includes(t.id));
+  const tags = getTags();
+  if (!tags.length) { toast.warning('Belum ada tag — buat dulu di Pengaturan'); return; }
+  let selected = new Set();
+  const grid = el('div', { class: 'chip-multi' });
+  tags.forEach(t => {
+    const c = el('button', {
+      type: 'button',
+      class: 'chip-multi-item',
+      style: `--chip-color:${t.color || '#888'}`,
+      onclick: () => {
+        if (selected.has(t.id)) selected.delete(t.id);
+        else selected.add(t.id);
+        c.classList.toggle('active');
+        hap('toggle');
+      }
+    }, '#' + t.name);
+    grid.appendChild(c);
+  });
+  showModal({
+    title: `Tambah tag ke ${txs.length} transaksi`,
+    body: grid,
+    save: () => {
+      if (!selected.size) { toast.warning('Pilih minimal 1 tag'); return; }
+      txs.forEach(t => {
+        t.tags = Array.from(new Set([...(t.tags || []), ...selected]));
+      });
+      save(); hap('save'); render();
+      toast.success(`Tag ditambah ke ${txs.length} transaksi`);
+      ui.bulkSelected.clear();
+    }
+  });
+}
+
+function bulkChangeDate() {
+  if (!ui.bulkSelected.size) return;
+  const ids = Array.from(ui.bulkSelected);
+  const txs = state.expenses.filter(t => ids.includes(t.id));
+  const input = el('input', { type: 'date', value: isoDate(new Date()) });
+  showModal({
+    title: `Ubah tanggal (${txs.length})`,
+    body: el('div', { class: 'field-group' }, el('label', {}, 'Tanggal baru'), input),
+    save: () => {
+      if (!input.value) { toast.warning('Pilih tanggal'); return; }
+      txs.forEach(t => { t.date = input.value; });
+      save(); hap('save'); render();
+      toast.success(`Tanggal diubah untuk ${txs.length} transaksi`);
+      ui.bulkSelected.clear();
+    }
+  });
+}
+
+// ========== ROUND 2 — Cycle 4: Transaction templates ==========
+
+function saveTxAsTemplate(t) {
+  if (!t || t.type === 'transfer') return;
+  const name = prompt('Nama template:', t.name || 'Template baru');
+  if (!name) return;
+  state.settings.txTemplates = state.settings.txTemplates || [];
+  state.settings.txTemplates.push({
+    id: uid(),
+    name,
+    type: t.type,
+    category: t.category,
+    accountId: t.accountId,
+    amount: t.amount,
+    txName: t.name,
+    tags: t.tags || [],
+    usedCount: 0,
+    createdAt: Date.now(),
+  });
+  save();
+  toast.success(`Template "${name}" disimpan`);
+  hap('save');
+}
+
+function openTemplatePicker() {
+  const templates = state.settings.txTemplates || [];
+  if (!templates.length) {
+    toast.info('Belum ada template. Tahan transaksi → "Simpan sebagai template"');
+    return;
+  }
+  hap('navigate');
+  const body = el('div', { class: 'template-list' });
+  templates.sort((a, b) => (b.usedCount || 0) - (a.usedCount || 0)).forEach(tpl => {
+    const cat = getCategory(tpl.type, tpl.category);
+    const row = el('button', {
+      type: 'button', class: 'template-row',
+      onclick: () => {
+        const tx = {
+          id: uid(),
+          type: tpl.type,
+          date: isoDate(new Date()),
+          category: tpl.category,
+          accountId: tpl.accountId,
+          amount: tpl.amount,
+          name: tpl.txName,
+          tags: [...(tpl.tags || [])],
+          createdAt: Date.now(),
+        };
+        tpl.usedCount = (tpl.usedCount || 0) + 1;
+        saveTx(tx, false);
+        hideModal();
+        hap('save');
+        toast.success(`Transaksi "${tpl.name}" dibuat`);
+      }
+    },
+      el('div', { class: 'template-icon' }, cat.icon),
+      el('div', { class: 'template-meta' },
+        el('div', { class: 'template-name' }, tpl.name),
+        el('div', { class: 'template-sub' }, money(tpl.amount) + ' · ' + (tpl.usedCount || 0) + '× dipakai')
+      ),
+      el('button', {
+        type: 'button', class: 'template-del', 'aria-label': 'Hapus template',
+        onclick: (e) => {
+          e.stopPropagation();
+          state.settings.txTemplates = templates.filter(x => x.id !== tpl.id);
+          save();
+          row.remove();
+          hap('delete');
+          toast.info('Template dihapus');
+        }
+      }, '✕')
+    );
+    body.appendChild(row);
+  });
+  showModal({ title: 'Pilih Template', body, save: null });
+}
+
+// ========== ROUND 2 — Cycle 2: Analytics (additional reports) ==========
+
+function renderSavingsRateTrend() {
+  const host = $('#savingsRateCard');
+  if (!host || typeof Chart === 'undefined') return;
+  const months = [];
+  for (let i = -5; i <= 0; i++) {
+    const ref = getMonthDate(i);
+    const inc = state.expenses.filter(t => isInMonth(t.date, ref) && t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const exp = state.expenses.filter(t => isInMonth(t.date, ref) && t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const rate = inc > 0 ? Math.max(0, Math.min(100, ((inc - exp) / inc) * 100)) : 0;
+    months.push({ label: monthYear(ref).split(' ')[0].slice(0, 3), rate });
+  }
+  const canvas = host.querySelector('canvas');
+  if (!canvas) return;
+  if (host._chart) host._chart.destroy();
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#34c759';
+  host._chart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: months.map(m => m.label),
+      datasets: [{
+        data: months.map(m => m.rate),
+        borderColor: accent,
+        backgroundColor: hexToRgba(accent, 0.18),
+        tension: 0.32, fill: true, pointRadius: 4, pointBackgroundColor: accent,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y.toFixed(1)}%` } } },
+      scales: {
+        y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+function renderTopExpensesEver() {
+  const host = $('#topExpensesCard');
+  if (!host) return;
+  const top = state.expenses.filter(t => t.type === 'expense').sort((a, b) => b.amount - a.amount).slice(0, 5);
+  host.innerHTML = '';
+  if (!top.length) { host.appendChild(el('div', { class: 'muted-txt' }, 'Belum ada pengeluaran')); return; }
+  top.forEach((t, i) => {
+    const cat = getCategory('expense', t.category);
+    host.appendChild(el('div', { class: 'top-exp-row' },
+      el('div', { class: 'top-exp-rank' }, '#' + (i + 1)),
+      el('div', { class: 'top-exp-icon' }, cat.icon),
+      el('div', { class: 'top-exp-meta' },
+        el('div', { class: 'top-exp-name' }, t.name || cat.name),
+        el('div', { class: 'top-exp-date' }, shortDate(t.date))
+      ),
+      el('div', { class: 'top-exp-amt expense-txt' }, money(t.amount))
+    ));
+  });
+}
+
+function renderProjectedMonthEnd() {
+  const host = $('#projectedEndCard');
+  if (!host) return;
+  const ref = getMonthDate(0);
+  const today = new Date();
+  const totalDays = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
+  const dayOfMonth = Math.min(totalDays, today.getDate());
+  const expThisMonth = state.expenses.filter(t => isInMonth(t.date, ref) && t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const incThisMonth = state.expenses.filter(t => isInMonth(t.date, ref) && t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const projectedExp = (expThisMonth / dayOfMonth) * totalDays;
+  const projectedDiff = incThisMonth - projectedExp;
+  host.innerHTML = '';
+  host.appendChild(el('div', { class: 'projection-row' },
+    el('div', { class: 'projection-label' }, 'Proyeksi akhir bulan'),
+    el('div', { class: 'projection-amt ' + (projectedDiff >= 0 ? 'income-txt' : 'expense-txt') },
+      (projectedDiff >= 0 ? '+' : '') + money(projectedDiff))
+  ));
+  host.appendChild(el('div', { class: 'projection-sub muted-txt' },
+    `Berdasarkan rata-rata ${dayOfMonth} hari pertama bulan ini`));
+}
+
+// ========== ROUND 2 — Cycle 4: Data smarts (duplicate detection) ==========
+
+function findDuplicateTxs() {
+  const groups = {};
+  state.expenses.forEach(t => {
+    if (t.type === 'transfer') return;
+    const key = `${t.date}|${t.amount}|${(t.name || '').toLowerCase()}|${t.accountId || ''}`;
+    (groups[key] = groups[key] || []).push(t);
+  });
+  return Object.values(groups).filter(g => g.length > 1);
+}
+
+function openDuplicateModal() {
+  const dups = findDuplicateTxs();
+  if (!dups.length) { toast.success('Tidak ada duplikat ditemukan'); return; }
+  hap('navigate');
+  const body = el('div', { class: 'dup-list' });
+  body.appendChild(el('div', { class: 'muted-txt', style: 'margin-bottom:12px' },
+    `${dups.length} grup transaksi terdeteksi mungkin duplikat (tanggal+jumlah+nama sama):`));
+  dups.forEach(group => {
+    const cat = getCategory(group[0].type, group[0].category);
+    const card = el('div', { class: 'dup-card' });
+    card.appendChild(el('div', { class: 'dup-card-head' },
+      el('span', {}, cat.icon + ' ' + (group[0].name || cat.name)),
+      el('span', { class: 'expense-txt' }, money(group[0].amount))
+    ));
+    group.forEach((t, idx) => {
+      card.appendChild(el('div', { class: 'dup-card-row' },
+        el('span', {}, shortDate(t.date) + (idx === 0 ? ' (asli)' : '')),
+        el('button', {
+          type: 'button', class: 'btn-link', disabled: idx === 0,
+          onclick: () => {
+            state.expenses = state.expenses.filter(x => x.id !== t.id);
+            save(); render();
+            toast.success('Duplikat dihapus');
+            hideModal();
+            setTimeout(openDuplicateModal, 200);
+          }
+        }, idx === 0 ? '' : 'Hapus')
+      ));
+    });
+    body.appendChild(card);
+  });
+  showModal({ title: 'Deteksi Duplikat', body, save: null });
+}
+
+// ========== ROUND 2 — Cycle 5: Backup reminder banner ==========
+
+function maybeShowBackupReminder() {
+  const days = daysSinceLastBackup();
+  if (days < 30) return;
+  if (sessionStorage.getItem('backupReminderShown')) return;
+  sessionStorage.setItem('backupReminderShown', '1');
+  setTimeout(() => {
+    toast.warning(`Sudah ${days} hari belum backup — Pengaturan → Export`, { duration: 6000 });
+  }, 1500);
+}
+
 function exportJson() {
   const data = JSON.stringify(state, null, 2);
   downloadFile(data, `duitku-backup-${isoDate()}.json`, 'application/json');
@@ -5095,6 +5667,8 @@ function init() {
   $('#importCsvFile')?.addEventListener('change', (e) => { if (e.target.files[0]) importCsv(e.target.files[0]); e.target.value = ''; });
   $('#cellSeed').addEventListener('click', seedData);
   $('#cellHealthCheck')?.addEventListener('click', openHealthCheckModal);
+  $('#cellDuplicates')?.addEventListener('click', openDuplicateModal);
+  $('#cellTemplates')?.addEventListener('click', openTemplatePicker);
   $('#cellReset').addEventListener('click', resetAll);
 
   // Accent swatches
@@ -5117,6 +5691,16 @@ function init() {
     }
     // Global shortcuts: g+letter for navigation (Gmail-style)
     handleGlobalShortcut(e);
+    // Ctrl/Cmd+K → command palette
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      openCommandPalette();
+    }
+    // "/" → focus expense search
+    if (e.key === '/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) {
+      const s = $('#expenseSearch');
+      if (s) { e.preventDefault(); s.focus(); }
+    }
   });
 
   // Initial nav
@@ -5138,6 +5722,16 @@ function init() {
   // Bulk action bar buttons
   $('#bulkDeleteBtn')?.addEventListener('click', bulkDelete);
   $('#bulkCancelBtn')?.addEventListener('click', exitBulkMode);
+  $('#bulkRecatBtn')?.addEventListener('click', bulkRecategorize);
+  $('#bulkMoveAcctBtn')?.addEventListener('click', bulkMoveAccount);
+  $('#bulkAddTagBtn')?.addEventListener('click', bulkAddTag);
+  $('#bulkChangeDateBtn')?.addEventListener('click', bulkChangeDate);
+
+  // Advanced filter
+  $('#advFilterBtn')?.addEventListener('click', openAdvancedFilterModal);
+
+  // Backup reminder
+  maybeShowBackupReminder();
 }
 
 // PWA install prompt — show banner when browser allows install

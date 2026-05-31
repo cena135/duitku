@@ -154,6 +154,25 @@
   check('MAIN_TABS non-empty', () => Array.isArray(MAIN_TABS) && MAIN_TABS.length > 0);
   check('EMOJI_PALETTE non-empty', () => Array.isArray(EMOJI_PALETTE) && EMOJI_PALETTE.length > 0);
 
+  section('ROUND 2 — power user (search/filter/bulk/templates/analytics)');
+  check('openAdvancedFilterModal exists', () => isFn(window, 'openAdvancedFilterModal'));
+  check('applyAdvFilter exists', () => isFn(window, 'applyAdvFilter'));
+  check('countActiveAdvFilters returns 0 by default', () => countActiveAdvFilters() === 0);
+  check('openCommandPalette exists', () => isFn(window, 'openCommandPalette'));
+  check('pushRecentSearch exists', () => isFn(window, 'pushRecentSearch'));
+  check('bulkRecategorize exists', () => isFn(window, 'bulkRecategorize'));
+  check('bulkMoveAccount exists', () => isFn(window, 'bulkMoveAccount'));
+  check('bulkAddTag exists', () => isFn(window, 'bulkAddTag'));
+  check('bulkChangeDate exists', () => isFn(window, 'bulkChangeDate'));
+  check('saveTxAsTemplate exists', () => isFn(window, 'saveTxAsTemplate'));
+  check('openTemplatePicker exists', () => isFn(window, 'openTemplatePicker'));
+  check('renderSavingsRateTrend exists', () => isFn(window, 'renderSavingsRateTrend'));
+  check('renderTopExpensesEver exists', () => isFn(window, 'renderTopExpensesEver'));
+  check('renderProjectedMonthEnd exists', () => isFn(window, 'renderProjectedMonthEnd'));
+  check('findDuplicateTxs returns array', () => Array.isArray(findDuplicateTxs()));
+  check('openDuplicateModal exists', () => isFn(window, 'openDuplicateModal'));
+  check('maybeShowBackupReminder exists', () => isFn(window, 'maybeShowBackupReminder'));
+
   section('DOM smoke');
   check('renderReports does not throw', () => {
     try { renderReports(); } catch (e) {}
