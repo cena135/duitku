@@ -1656,6 +1656,129 @@ function openTxContextMenu(tx) {
   ]);
 }
 
+// ============================================================
+// CYCLE 3 — Gesture + animation polish
+// ============================================================
+
+// Swipe-to-delete on tx rows. Activates on horizontal drag, threshold > 50px reveals.
+function setupSwipeToDelete() {
+  let target = null, startX = 0, dx = 0, isHorizontal = null, startY = 0;
+  const onStart = (e) => {
+    if (document.body.classList.contains('bulk-mode')) return;
+    const row = e.target.closest('.tx-row');
+    if (!row || !row.dataset.txId) return;
+    target = row;
+    const p = e.touches ? e.touches[0] : e;
+    startX = p.clientX; startY = p.clientY; dx = 0; isHorizontal = null;
+    target.classList.add('swipe-dragging');
+  };
+  const onMove = (e) => {
+    if (!target) return;
+    const p = e.touches ? e.touches[0] : e;
+    const newDx = p.clientX - startX;
+    const newDy = p.clientY - startY;
+    if (isHorizontal === null) {
+      if (Math.abs(newDx) < 8 && Math.abs(newDy) < 8) return;
+      isHorizontal = Math.abs(newDx) > Math.abs(newDy);
+      if (!isHorizontal) { reset(); return; }
+    }
+    if (!isHorizontal) return;
+    dx = Math.min(0, newDx); // only allow left swipe
+    target.style.transform = `translateX(${dx}px)`;
+  };
+  const onEnd = () => {
+    if (!target) return;
+    target.classList.remove('swipe-dragging');
+    target.classList.add('swipe-active');
+    if (dx < -50) {
+      // Reveal action — if continued past -120, delete immediately
+      if (dx < -150) {
+        const txId = target.dataset.txId;
+        target.style.transform = `translateX(-100%)`;
+        setTimeout(() => deleteTx(txId), 200);
+      } else {
+        target.classList.add('swipe-revealed');
+        target.style.transform = '';
+        // Tap anywhere to dismiss reveal
+        const dismiss = () => {
+          target?.classList.remove('swipe-revealed');
+          document.removeEventListener('click', dismiss, true);
+          target = null;
+        };
+        setTimeout(() => document.addEventListener('click', dismiss, { capture: true, once: true }), 100);
+      }
+    } else {
+      target.style.transform = '';
+      target = null;
+    }
+    isHorizontal = null;
+  };
+  const reset = () => {
+    if (!target) return;
+    target.classList.remove('swipe-dragging');
+    target.style.transform = '';
+    target = null; isHorizontal = null;
+  };
+  document.addEventListener('mousedown', onStart);
+  document.addEventListener('touchstart', onStart, { passive: true });
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, { passive: true });
+  document.addEventListener('mouseup', onEnd);
+  document.addEventListener('touchend', onEnd);
+  document.addEventListener('touchcancel', reset);
+}
+
+// Milestone burst — celebratory full-screen animation for streak milestones
+function fireMilestone(emoji, text) {
+  const burst = el('div', { class: 'milestone-burst' },
+    el('div', { class: 'mb-bubble' },
+      el('span', { class: 'mb-emoji' }, emoji),
+      text
+    )
+  );
+  document.body.appendChild(burst);
+  fireConfetti(40);
+  hap('goal');
+  setTimeout(() => burst.remove(), 2400);
+}
+
+// Check & fire milestone if streak hit (called after each saveTx)
+function checkStreakMilestone() {
+  const streak = computeStreak();
+  const milestones = [7, 30, 100, 365];
+  if (!milestones.includes(streak)) return;
+  const lastFiredFor = state.settings.lastStreakMilestone || 0;
+  if (lastFiredFor >= streak) return; // already celebrated this milestone
+  state.settings.lastStreakMilestone = streak;
+  save();
+  const labels = { 7: 'Seminggu Berturut!', 30: 'Sebulan Berturut!', 100: '100 Hari Berturut!', 365: 'Setahun Penuh!' };
+  fireMilestone('🔥', `🎉 ${streak} hari catat\n${labels[streak]}`);
+}
+
+// Theme transition — wrap applyTheme calls to add smooth color fade
+const _origApplyTheme = applyTheme;
+applyTheme = function() {
+  document.documentElement.classList.add('theme-transitioning');
+  _origApplyTheme();
+  setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 500);
+};
+
+// Parallax hero — subtle tilt on touch/mouse-move within hero card
+function setupHeroParallax() {
+  document.addEventListener('mousemove', (e) => {
+    document.querySelectorAll('.hero-card').forEach(card => {
+      const r = card.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
+        card.style.transform = '';
+        return;
+      }
+      const cx = (e.clientX - r.left) / r.width - 0.5;
+      const cy = (e.clientY - r.top) / r.height - 0.5;
+      card.style.transform = `perspective(800px) rotateX(${-cy * 3}deg) rotateY(${cx * 3}deg)`;
+    });
+  });
+}
+
 // Bulk select mode — multi-select tx rows for batch operations
 const bulkSelected = new Set();
 function enterBulkMode(initialId) {
@@ -2799,6 +2922,8 @@ function saveTx(t, isEdit) {
   save(); hap('save'); hideModal(); render();
   if (!isEdit) showSuccess();
   if (isEdit) toast('Tersimpan');
+  // Check streak milestones (7/30/100/365 days)
+  if (!isEdit) checkStreakMilestone();
 }
 function deleteTx(id) {
   const tx = state.expenses.find(t => t.id === id);
@@ -4665,6 +4790,8 @@ function init() {
   setupFocusTrap();
   setupGridKeyboardNav();
   setupPullToRefreshHint();
+  setupSwipeToDelete();
+  setupHeroParallax();
 
   // Onboarding CTAs
   $('#ctaAddFirst')?.addEventListener('click', () => openExpenseModal());

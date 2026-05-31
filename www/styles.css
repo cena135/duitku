@@ -2109,6 +2109,81 @@ button:focus-visible, .cell:focus-visible, .tx-row:focus-visible,
 }
 
 /* ============================================================
+   SWIPE-TO-DELETE — tx rows swipe left to reveal action
+   ============================================================ */
+.tx-row.swipe-active {
+  transition: transform .25s cubic-bezier(.32,.72,0,1);
+}
+.tx-row.swipe-dragging { transition: none; }
+.tx-row.swipe-revealed {
+  transform: translateX(-80px) !important;
+}
+.tx-row .swipe-action {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 80px;
+  background: var(--expense);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  z-index: -1;
+  border-radius: 0 var(--r-card) var(--r-card) 0;
+}
+
+/* ============================================================
+   MILESTONE BURST — celebratory animation for streak milestones
+   ============================================================ */
+.milestone-burst {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 120;
+  pointer-events: none;
+  animation: fadein .2s, fadeout .3s 2s forwards;
+}
+@keyframes fadeout { to { opacity: 0; } }
+.milestone-burst .mb-bubble {
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #000));
+  color: var(--accent-ink);
+  padding: 24px 40px;
+  border-radius: 24px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 22px;
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: milestone-pop .8s cubic-bezier(.34,1.56,.64,1);
+}
+.milestone-burst .mb-emoji { font-size: 56px; display: block; margin-bottom: 8px; }
+@keyframes milestone-pop {
+  0% { transform: scale(.3); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ============================================================
+   THEME TRANSITION — smooth color fade when switching themes
+   ============================================================ */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color .35s, color .25s, border-color .35s !important;
+}
+
+/* ============================================================
+   PARALLAX HERO — subtle tilt on touch
+   ============================================================ */
+.hero-card {
+  transition: transform .25s ease;
+  transform-origin: center;
+  will-change: transform;
+}
+
+/* ============================================================
    BULK SELECT MODE — multi-tx selection + floating action bar
    ============================================================ */
 body.bulk-mode .tx-row {
