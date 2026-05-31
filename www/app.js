@@ -350,16 +350,40 @@ function getRecentSuggestions(type, limit = 5) {
   return sorted.slice(0, limit);
 }
 
-// Suggest category from past tx with similar name
+// Suggest category from past tx with similar name. Uses two sources:
+// 1) Explicit user-taught mappings in state.settings.categoryLearning (most authoritative)
+// 2) Inference from most-recent past tx with name containing the query
 function suggestCategory(name, type) {
   if (!name || name.length < 2) return null;
   const needle = name.toLowerCase().trim();
+  // 1) User-taught: exact or prefix match
+  const learned = state.settings.categoryLearning?.[type] || {};
+  for (const [pattern, catId] of Object.entries(learned)) {
+    if (needle.includes(pattern.toLowerCase())) return catId;
+  }
+  // 2) Recent similar-name tx (existing inference)
   const matches = state.expenses
     .filter(t => t.type === type && t.name && t.name.toLowerCase().includes(needle))
     .sort((a,b) => b.date.localeCompare(a.date));
   if (matches.length === 0) return null;
-  // Most-recent match's category
   return matches[0].category;
+}
+
+// Record a learned name→category mapping. Called when user saves a tx
+// and the name+category combo is consistent (3+ times) — auto-strengthens.
+function learnCategoryFromTx(t) {
+  if (!t || !t.name || !t.category || t.type !== 'expense' && t.type !== 'income') return;
+  const name = t.name.toLowerCase().trim();
+  if (name.length < 3) return;
+  // Count how many times this name has been categorized the same way
+  const sameNameTxs = state.expenses.filter(x => x.type === t.type && x.name && x.name.toLowerCase().trim() === name);
+  const sameCat = sameNameTxs.filter(x => x.category === t.category);
+  // If 3+ matches with same cat, learn it
+  if (sameCat.length >= 3) {
+    state.settings.categoryLearning = state.settings.categoryLearning || {};
+    state.settings.categoryLearning[t.type] = state.settings.categoryLearning[t.type] || {};
+    state.settings.categoryLearning[t.type][name] = t.category;
+  }
 }
 
 // ============================================================
@@ -1744,6 +1768,8 @@ function renderSubscription() {
   }
   $('#subActive').textContent  = active.length;
 
+  renderSubCalendar();
+
   const list = $('#subList');
   list.innerHTML = '';
   if (state.subscriptions.length === 0) {
@@ -1759,6 +1785,44 @@ function renderSubscription() {
   list.appendChild(el('div', { class: 'list-group' }, el('div', { class: 'list-group-rows' },
     ...sorted.map(s => renderSubRow(s))
   )));
+}
+
+// 30-day strip showing dots for upcoming subscription renewals
+function renderSubCalendar() {
+  const wrap = $('#subCalendar');
+  if (!wrap) return;
+  const active = state.subscriptions.filter(s => s.active !== false);
+  if (active.length === 0) { wrap.innerHTML = ''; return; }
+  wrap.className = 'sub-calendar';
+  wrap.innerHTML = '';
+  wrap.appendChild(el('div', { class: 'sc-title' }, '📅 30 Hari Ke Depan'));
+  const strip = el('div', { class: 'sub-calendar-strip' });
+  const today = new Date();
+  // Count renewals per day
+  const byDay = new Map();
+  active.forEach(s => {
+    const d = daysUntil(s.nextRenewal);
+    if (d >= 0 && d <= 29) {
+      byDay.set(d, (byDay.get(d) || 0) + 1);
+    }
+  });
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(today); d.setDate(today.getDate() + i);
+    const renewals = byDay.get(i) || 0;
+    const cls = ['sc-day'];
+    if (i === 0) cls.push('today');
+    else if (renewals > 0) { cls.push('has-renewal'); if (renewals >= 2) cls.push('many'); }
+    const cell = el('div', { class: cls.join(' '),
+      title: fullDate(isoDate(d)) + (renewals > 0 ? ' — ' + renewals + ' renewal' : '') },
+      String(d.getDate()));
+    strip.appendChild(cell);
+  }
+  wrap.appendChild(strip);
+  const total = Array.from(byDay.values()).reduce((s, v) => s + v, 0);
+  const upcoming = active.filter(s => daysUntil(s.nextRenewal) >= 0 && daysUntil(s.nextRenewal) <= 30);
+  const totalCost = upcoming.reduce((s, sub) => s + sub.amount, 0);
+  wrap.appendChild(el('div', { class: 'sub-calendar-legend' },
+    el('strong', {}, total + ' renewal'), ' total — ', el('strong', {}, money(totalCost))));
 }
 
 function renderSubRow(s) {
@@ -2540,9 +2604,10 @@ function saveTx(t, isEdit) {
     t.createdAt = Date.now();
     state.expenses.push(t);
   }
+  // Record name→category mapping when user has consistently used same category
+  learnCategoryFromTx(t);
   save(); hap('save'); hideModal(); render();
   if (!isEdit) showSuccess();
-  // Only show toast for edit (success overlay covers new save)
   if (isEdit) toast('Tersimpan');
 }
 function deleteTx(id) {

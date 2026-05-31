@@ -2109,6 +2109,71 @@ button:focus-visible, .cell:focus-visible, .tx-row:focus-visible,
 }
 
 /* ============================================================
+   SUBSCRIPTION RENEWAL MINI-CALENDAR (30-day strip)
+   ============================================================ */
+.sub-calendar {
+  margin: 0 16px 16px;
+  background: var(--card);
+  border-radius: var(--r-card);
+  padding: 14px 12px;
+  box-shadow: var(--shadow-sm);
+}
+.sub-calendar .sc-title {
+  font-size: 13px;
+  color: var(--label-2);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+.sub-calendar-strip {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sub-calendar-strip::-webkit-scrollbar { display: none; }
+.sc-day {
+  aspect-ratio: 1;
+  background: var(--fill-4);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--label-2);
+  font-weight: 500;
+  min-width: 22px;
+  position: relative;
+}
+.sc-day.today { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.sc-day.has-renewal {
+  background: color-mix(in srgb, var(--accent) 30%, var(--fill-3));
+  color: var(--label);
+  font-weight: 600;
+}
+.sc-day.has-renewal::after {
+  content: '';
+  position: absolute;
+  bottom: 1px;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.sc-day.has-renewal.many::after {
+  box-shadow: -5px 0 0 var(--accent), 5px 0 0 var(--accent);
+}
+.sub-calendar-legend {
+  font-size: 11px;
+  color: var(--label-2);
+  text-align: center;
+  margin-top: 10px;
+  letter-spacing: -.08px;
+}
+.sub-calendar-legend strong { color: var(--label); font-weight: 600; }
+
+/* ============================================================
    TAG AUTOCOMPLETE — dropdown below name field
    ============================================================ */
 .tag-autocomplete {
