@@ -173,6 +173,7 @@ let ui = {
   vmode: 'list',         // list | calendar (for expense view)
   filter: 'all',
   accountFilter: 'all',  // 'all' | accountId
+  tagFilter: 'all',      // 'all' | tagId
   quickFilter: 'all',    // all | today | week | month | year
   searchQuery: '',
   monthOffset: 0,
@@ -1338,6 +1339,7 @@ function renderExpense() {
 
   // Render filter chip rows
   renderAccountFilterRow();
+  renderTagFilterRow();
   renderQuickFilterRow();
 
   // Quick filter takes precedence over monthOffset (overrides month nav)
@@ -1353,6 +1355,9 @@ function renderExpense() {
     txs = txs.filter(t => t.accountId === ui.accountFilter
       || t.fromAccountId === ui.accountFilter
       || t.toAccountId === ui.accountFilter);
+  }
+  if (ui.tagFilter !== 'all') {
+    txs = txs.filter(t => Array.isArray(t.tags) && t.tags.includes(ui.tagFilter));
   }
 
   const q = ui.searchQuery.trim().toLowerCase();
@@ -1469,6 +1474,26 @@ function renderAccountFilterRow() {
     const info = accountTypeInfo(a.type);
     wrap.appendChild(mkChip(a.id, a.name, info.icon));
   });
+}
+
+// Tag filter chips — shown only when user has tags
+function renderTagFilterRow() {
+  const wrap = $('#tagFilterRow');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const tags = getTags();
+  if (tags.length === 0) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const mkChip = (id, label, color) => el('button', {
+    class: 'account-filter-chip' + (ui.tagFilter === id ? ' active' : ''),
+    type: 'button',
+    onclick: () => { ui.tagFilter = id; haptic(5); renderExpense(); }
+  },
+    color ? el('span', { style: `width:8px;height:8px;border-radius:50%;background:${color};display:inline-block` }) : null,
+    label
+  );
+  wrap.appendChild(mkChip('all', 'Semua Tag'));
+  tags.forEach(t => wrap.appendChild(mkChip(t.id, '#' + t.name, t.color)));
 }
 
 function renderTxRow(t) {
@@ -1880,9 +1905,32 @@ function renderGoalRow(g) {
 // REPORTS
 // ============================================================
 
+// Lazy-loads Chart.js from CDN on first Reports view entry. Cached after first call.
+let _chartLoadPromise = null;
+function ensureChartLoaded() {
+  if (typeof window.Chart === 'function') return Promise.resolve();
+  if (_chartLoadPromise) return _chartLoadPromise;
+  _chartLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = (e) => { _chartLoadPromise = null; reject(e); };
+    document.head.appendChild(s);
+  });
+  return _chartLoadPromise;
+}
+
 function renderReports() {
   const ref = getMonthDate(ui.reportOffset);
   $('#reportMonthLabel').textContent = monthYear(ref);
+
+  // Lazy-load Chart.js before rendering pie/line charts
+  if (typeof window.Chart !== 'function') {
+    ensureChartLoaded().then(() => renderReports()).catch(() =>
+      toast.error('Gagal load chart library — perlu internet sekali'));
+    // Render text-only parts now; charts will appear after Chart.js loads
+  }
 
   const monthTx = state.expenses.filter(t => isInMonth(t.date, ref));
   const income  = monthTx.filter(t => t.type === 'income').reduce((s,t) => s+t.amount, 0);
@@ -1918,8 +1966,11 @@ function renderReports() {
     $('#cmpDiff').className = 'compare-diff';
   }
 
-  renderPieChart(monthTx);
-  renderLineChart(ref);
+  // Charts: only render if Chart.js loaded (lazy-load triggers re-render when ready)
+  if (typeof window.Chart === 'function') {
+    renderPieChart(monthTx);
+    renderLineChart(ref);
+  }
 
   const top = monthTx.filter(t => t.type === 'expense')
     .sort((a,b) => b.amount - a.amount).slice(0, 5);
@@ -2061,6 +2112,19 @@ function renderSettings() {
                                   p === 'granted' ? 'Izin aktif' : 'Untuk reminder langganan';
   } else {
     $('#notifSub').textContent = 'Tidak didukung browser ini';
+  }
+
+  // Backup reminder hint on Export cell — if never backed up or >30 days
+  const days = daysSinceLastBackup();
+  const expCell = $('#cellExport');
+  if (expCell) {
+    const existingHint = expCell.querySelector('.backup-hint');
+    if (existingHint) existingHint.remove();
+    if (days < 0 || days > 30) {
+      const hint = el('span', { class: 'backup-hint', style: 'background:rgba(255,149,0,.2);color:var(--warning);padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;margin-right:6px' },
+        days < 0 ? 'Belum pernah backup' : `${days}h yang lalu`);
+      expCell.querySelector('.cell-chevron').before(hint);
+    }
   }
 }
 
@@ -2283,24 +2347,37 @@ function openExpenseModal(tx = null) {
           buildAccountPicker(() => t.accountId, id => t.accountId = id)));
       }
 
-      // Name + date — name has smart category suggestion
-      body.appendChild(el('div', { class: 'field-row' },
-        formField('Nama', el('input', { type: 'text', placeholder: 'Misal: Indomie goreng',
-          value: t.name || '', 'data-field': 'name',
-          oninput: (e) => {
-            t.name = e.target.value;
-            // Smart suggest only when user hasn't manually picked + creating new
-            if (!isEdit && !t._userPickedCategory && e.target.value.length >= 3) {
-              const suggested = suggestCategory(e.target.value, t.type);
-              if (suggested && suggested !== t.category) {
-                t.category = suggested;
-                catGrid.refresh();
-              }
+      // Name + date — name has smart category suggestion + tag autocomplete
+      const nameWrap = el('div', { class: 'tag-autocomplete' });
+      const nameInput = el('input', { type: 'text', placeholder: 'Misal: Indomie goreng',
+        value: t.name || '', 'data-field': 'name', autocomplete: 'off',
+        oninput: (e) => {
+          t.name = e.target.value;
+          // Smart suggest only when user hasn't manually picked + creating new
+          if (!isEdit && !t._userPickedCategory && e.target.value.length >= 3) {
+            const suggested = suggestCategory(e.target.value, t.type);
+            if (suggested && suggested !== t.category) {
+              t.category = suggested;
+              catGrid.refresh();
             }
-          } })),
+          }
+          // Tag autocomplete — show matching tags
+          renderTagAutocomplete(e.target.value, t);
+        } });
+      const acList = el('div', { class: 'tag-autocomplete-list', id: 'tagAutocompleteList' });
+      nameWrap.appendChild(nameInput);
+      nameWrap.appendChild(acList);
+
+      body.appendChild(el('div', { class: 'field-row' },
+        formField('Nama', nameWrap),
         formField('Tanggal', el('input', { type: 'date', value: t.date,
           oninput: (e) => t.date = e.target.value }))
       ));
+
+      // Hide AC when clicking outside
+      setTimeout(() => {
+        document.addEventListener('click', closeTagAutocomplete, { once: false });
+      }, 100);
 
       // Tags
       body.appendChild(el('div', { class: 'field' },
@@ -3492,6 +3569,101 @@ function setupFocusTrap() {
   });
 }
 
+// Tag autocomplete — show matching tags as user types in tx name
+function renderTagAutocomplete(query, tx) {
+  const list = $('#tagAutocompleteList');
+  if (!list) return;
+  list.innerHTML = '';
+  const q = (query || '').toLowerCase().trim();
+  if (q.length < 2) return;
+  // Match tags whose name contains the query
+  const matches = state.tags
+    .filter(t => t.name.toLowerCase().includes(q) && !(tx.tags || []).includes(t.id))
+    .slice(0, 5);
+  if (matches.length === 0) return;
+  matches.forEach(tag => {
+    const item = el('div', { class: 'tag-autocomplete-item', tabindex: '0', onclick: (e) => {
+      e.stopPropagation();
+      tx.tags = [...(tx.tags || []), tag.id];
+      hap('select');
+      list.innerHTML = '';
+      rebuildModalBody();
+    }},
+      el('div', { class: 'ac-dot', style: `background:${tag.color}` }),
+      el('span', {}, '#' + tag.name),
+      el('span', { class: 'muted-txt', style: 'font-size:11px;margin-left:auto' },
+        state.expenses.filter(t => (t.tags||[]).includes(tag.id)).length + ' tx')
+    );
+    list.appendChild(item);
+  });
+}
+function closeTagAutocomplete(e) {
+  const list = $('#tagAutocompleteList');
+  if (!list) return;
+  if (e && e.target && e.target.closest('.tag-autocomplete')) return;
+  list.innerHTML = '';
+}
+
+// Keyboard shortcut help modal
+function openShortcutHelp() {
+  showModal({
+    title: 'Keyboard Shortcuts',
+    save: null,
+    body: () => {
+      const body = el('div');
+      const shortcuts = [
+        { key: '?',         desc: 'Tampilkan bantuan ini' },
+        { key: 'g d',       desc: 'Buka Beranda (Dashboard)' },
+        { key: 'g t',       desc: 'Buka Transaksi' },
+        { key: 'g s',       desc: 'Buka Langganan (Subscription)' },
+        { key: 'g b',       desc: 'Buka Budget' },
+        { key: 'g r',       desc: 'Buka Laporan (Reports)' },
+        { key: 'g p',       desc: 'Buka Pengaturan' },
+        { key: 'n',         desc: 'Transaksi baru (FAB)' },
+        { key: 'Esc',       desc: 'Tutup modal / overlay' },
+        { key: 'Tab',       desc: 'Navigate (di modal: focus trap aktif)' },
+        { key: '↑ ↓ ← →',   desc: 'Navigasi grid kategori/akun/aksen' },
+        { key: 'Enter / Space', desc: 'Aktivasi item yang difokus' },
+      ];
+      const group = el('div', { class: 'field-group' });
+      shortcuts.forEach(s => {
+        group.appendChild(el('div', { class: 'field-row-inline' },
+          el('kbd', { style: 'background:var(--fill-3);padding:3px 8px;border-radius:6px;font-family:ui-monospace,monospace;font-size:13px;color:var(--label)' }, s.key),
+          el('div', { style: 'flex:1;color:var(--label-2);font-size:14px;margin-left:12px' }, s.desc)
+        ));
+      });
+      body.appendChild(group);
+      body.appendChild(el('div', { class: 'group-footer', style: 'padding:0 28px 8px' },
+        'Shortcuts cuma jalan di laptop/desktop. Di HP, semua interaksi via tap/swipe.'
+      ));
+      return body;
+    }
+  });
+}
+
+// Gmail-style sequence shortcuts: press "g" then a letter within 1 sec
+let _gPressedAt = 0;
+function handleGlobalShortcut(e) {
+  if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) return;
+  if (!$('#modal').classList.contains('hidden')) return; // skip while modal open
+  const now = Date.now();
+  if (e.key === 'g') { _gPressedAt = now; return; }
+  if (now - _gPressedAt < 1200) {
+    const targets = { d:'dashboard', t:'expense', s:'subscription', b:'budget', r:'reports', p:'settings' };
+    if (targets[e.key]) {
+      e.preventDefault();
+      _gPressedAt = 0;
+      navigate(targets[e.key]);
+      hap('navigate');
+    }
+  }
+  // Single-key shortcuts
+  if (e.key === 'n' && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault();
+    fabAction();
+  }
+}
+
 // A11y: keyboard nav for picker grids — arrow keys move focus among siblings
 function setupGridKeyboardNav() {
   document.addEventListener('keydown', (e) => {
@@ -3749,7 +3921,16 @@ function fabLongPress() {
 function exportJson() {
   const data = JSON.stringify(state, null, 2);
   downloadFile(data, `duitku-backup-${isoDate()}.json`, 'application/json');
-  toast('Backup di-download');
+  state.settings.lastBackupAt = Date.now();
+  save();
+  toast.success('Backup di-download');
+}
+
+// Days since last backup. -1 if never backed up.
+function daysSinceLastBackup() {
+  const t = state.settings.lastBackupAt || 0;
+  if (t === 0) return -1;
+  return Math.floor((Date.now() - t) / 86400000);
 }
 
 function exportCsv() {
@@ -3787,11 +3968,92 @@ async function shareBackup() {
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: 'DuitKu Backup', text: 'DuitKu data backup' });
+      state.settings.lastBackupAt = Date.now();
+      save();
     } catch (e) { /* user cancelled */ }
   } else {
     exportJson();
-    toast('Web Share tidak didukung — di-download');
+    toast.info('Web Share tidak didukung — di-download');
   }
+}
+
+// CSV import — parse user CSV (forgiving), preview, then commit
+function importCsv(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const text = e.target.result;
+      const rows = parseCsv(text);
+      if (rows.length < 2) throw new Error('CSV kosong atau tidak valid');
+      const header = rows[0].map(h => h.toLowerCase().trim());
+      // Detect column indexes (forgiving — tolerate various column names)
+      const idx = {
+        date: header.findIndex(h => /tanggal|date/.test(h)),
+        type: header.findIndex(h => /tipe|type/.test(h)),
+        category: header.findIndex(h => /kategori|category/.test(h)),
+        name: header.findIndex(h => /nama|name|deskripsi|description/.test(h)),
+        amount: header.findIndex(h => /jumlah|amount/.test(h)),
+        account: header.findIndex(h => /akun|account/.test(h)),
+        tag: header.findIndex(h => /tag/.test(h)),
+        note: header.findIndex(h => /catatan|note/.test(h)),
+      };
+      if (idx.date < 0 || idx.amount < 0) {
+        throw new Error('CSV harus punya kolom Tanggal & Jumlah');
+      }
+      const newTx = [];
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r[idx.date] || !r[idx.amount]) continue;
+        const amount = parseFloat(String(r[idx.amount]).replace(/[^\d.-]/g, ''));
+        if (!(amount > 0)) continue;
+        const typeRaw = (idx.type >= 0 ? r[idx.type] : 'expense').toLowerCase();
+        const type = typeRaw.includes('income') || typeRaw.includes('masuk') || typeRaw.includes('pemasukan') ? 'income' : 'expense';
+        // Match category by name (case-insensitive)
+        const catName = idx.category >= 0 ? (r[idx.category] || '').toLowerCase().trim() : '';
+        const cat = getCategories(type).find(c => c.name.toLowerCase() === catName)?.id || getCategories(type)[0].id;
+        // Match account by name
+        const accName = idx.account >= 0 ? (r[idx.account] || '').toLowerCase().trim() : '';
+        const acc = state.accounts.find(a => a.name.toLowerCase() === accName)?.id || state.settings.defaultAccountId;
+        newTx.push({
+          id: uid(),
+          type, date: r[idx.date].trim(),
+          category: cat, name: (idx.name >= 0 ? r[idx.name] : '') || '',
+          amount, accountId: acc,
+          tags: [],
+          note: idx.note >= 0 ? (r[idx.note] || '') : '',
+          createdAt: Date.now(),
+        });
+      }
+      if (newTx.length === 0) { toast.error('Tidak ada baris valid'); return; }
+      if (!confirm(`Import ${newTx.length} transaksi? (Append, gak replace)`)) return;
+      newTx.forEach(t => state.expenses.push(t));
+      save(); render();
+      toast.success(`${newTx.length} transaksi diimport`);
+    } catch (err) { toast.error('Gagal: ' + err.message); }
+  };
+  reader.readAsText(file);
+}
+
+// Simple CSV parser — handles quoted fields and embedded commas
+function parseCsv(text) {
+  const rows = [];
+  let cur = '', row = [], inQuote = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], n = text[i+1];
+    if (inQuote) {
+      if (c === '"' && n === '"') { cur += '"'; i++; }
+      else if (c === '"') inQuote = false;
+      else cur += c;
+    } else {
+      if (c === '"') inQuote = true;
+      else if (c === ',') { row.push(cur); cur = ''; }
+      else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+      else if (c === '\r') { /* skip */ }
+      else cur += c;
+    }
+  }
+  if (cur.length > 0 || row.length > 0) { row.push(cur); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim().length > 0));
 }
 
 function importJson(file) {
@@ -4094,6 +4356,8 @@ function init() {
   $('#cellExportCsv').addEventListener('click', exportCsv);
   $('#cellImport').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', (e) => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; });
+  $('#cellImportCsv')?.addEventListener('click', () => $('#importCsvFile').click());
+  $('#importCsvFile')?.addEventListener('change', (e) => { if (e.target.files[0]) importCsv(e.target.files[0]); e.target.value = ''; });
   $('#cellSeed').addEventListener('click', seedData);
   $('#cellReset').addEventListener('click', resetAll);
 
@@ -4110,6 +4374,13 @@ function init() {
       else if (!$('#actionSheet').classList.contains('hidden')) hideActionSheet();
       else hideModal();
     }
+    // "?" shows keyboard shortcut help (only when no input is focused)
+    if (e.key === '?' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) {
+      e.preventDefault();
+      openShortcutHelp();
+    }
+    // Global shortcuts: g+letter for navigation (Gmail-style)
+    handleGlobalShortcut(e);
   });
 
   // Initial nav
@@ -4121,6 +4392,58 @@ function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+
+  // PWA install prompt — capture and offer inline button
+  setupInstallPrompt();
+}
+
+// PWA install prompt — show banner when browser allows install
+let _deferredInstallPrompt = null;
+function setupInstallPrompt() {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    _deferredInstallPrompt = e;
+    // Show banner only if user hasn't dismissed recently
+    const dismissedAt = parseInt(localStorage.getItem('duitku.installDismissed') || '0', 10);
+    if (Date.now() - dismissedAt < 7 * 86400000) return; // 1 week cooldown
+    renderInstallBanner();
+  });
+  window.addEventListener('appinstalled', () => {
+    _deferredInstallPrompt = null;
+    const banner = $('#installBanner');
+    if (banner) banner.classList.add('hidden');
+    toast.success('🎉 DuitKu terpasang di Home Screen');
+  });
+}
+
+function renderInstallBanner() {
+  const banner = $('#installBanner');
+  if (!banner || !_deferredInstallPrompt) return;
+  banner.className = 'install-banner';
+  banner.innerHTML = '';
+  banner.appendChild(el('span', { class: 'ib-emoji' }, '📲'));
+  banner.appendChild(el('div', { class: 'ib-text' },
+    el('strong', {}, 'Install DuitKu'),
+    el('span', {}, 'Akses cepat dari home screen, jalan offline')
+  ));
+  const actions = el('div', { class: 'ib-actions' });
+  actions.appendChild(el('button', { class: 'ib-primary',
+    onclick: async () => {
+      if (!_deferredInstallPrompt) return;
+      _deferredInstallPrompt.prompt();
+      const choice = await _deferredInstallPrompt.userChoice;
+      _deferredInstallPrompt = null;
+      banner.classList.add('hidden');
+      if (choice.outcome === 'accepted') toast.success('Installing...');
+    }
+  }, 'Install'));
+  actions.appendChild(el('button', { class: 'ib-dismiss',
+    onclick: () => {
+      banner.classList.add('hidden');
+      localStorage.setItem('duitku.installDismissed', String(Date.now()));
+    }
+  }, 'Nanti'));
+  banner.appendChild(actions);
 }
 
 document.addEventListener('DOMContentLoaded', init);

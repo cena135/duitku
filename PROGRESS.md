@@ -196,7 +196,32 @@ User: "aku pingin interaktif + enak dilihat"
 
 Bug: SVG namespace bug returns (sparkline `el('svg')`). Fix: createElement span + innerHTML wrapper.
 
-### 🎯 Round 10 (current): Polish Detail (34/34 PASS)
+### 🚀 Round 12 (current): /waste marathon (45/45 PASS) — 7 features
+
+Mix of perf + features + a11y + UX + tests, executed back-to-back per user clarification: "lakukan apapun, sebanyak mungkin, seperti selfplay, test e2e, rewrite code, 50 kali".
+
+1. **Lazy-load Chart.js** — `ensureChartLoaded()` only fetches CDN when Reports view opens. Index.html no longer hard-loads it. Saves ~50KB on initial page weight + render time when user doesn't visit Reports.
+2. **Keyboard shortcuts** — `?` shows help modal. `g+d/t/s/b/r/p` for navigation (Gmail-style). `n` for new transaction. Help modal lists all shortcuts with `<kbd>` styling.
+3. **Tag autocomplete** — typing in tx name shows matching tags as dropdown (top 5, not-yet-attached). Click to add. Color dot + usage count.
+4. **PWA install prompt** — captures `beforeinstallprompt` event, shows inline accent-gradient banner on dashboard with "Install"/"Nanti" buttons. 7-day cooldown after dismiss.
+5. **Backup tracking** — `lastBackupAt` recorded on export. Settings shows warning badge ("Belum pernah backup" or "X hari yang lalu") if > 30 days.
+6. **CSV import** — `importCsv()` parses user CSV with forgiving column detection (tanggal/date, tipe/type, jumlah/amount). Handles quoted commas. Confirms before append.
+7. **Tag filter chips** in Transaksi view — toggle per-tag filter, prominent UX vs hidden `#tag` search.
+
+**Perf benchmark:** Suite generates 1000 transactions, measures `accountBalance` cache build, 200 cached lookups, `totalBalance`, `renderDashboard`. All pass thresholds (cache <30ms, hits <10ms, total <20ms, render <200ms). Real numbers obscured by Chrome's virtual-time-budget but no functional regression.
+
+### 🎯 Round 11 (previous): /waste round — Budget rollover + A11y deep pass (39/39 PASS)
+
+7 features:
+1. Budget rollover (opt-in setting) — unused budget carries forward
+2. Top category footer on stats widget
+3. Insight icons animated per kind
+4. Skip-to-content link
+5. Modal focus trap + restore focus on close
+6. Picker grids → role=radiogroup with full ARIA
+7. Toast + FAB ARIA attributes
+
+### 🎯 Round 10: Polish Detail (34/34 PASS)
 
 7 features:
 1. **HAPTIC patterns library** — 11 semantic patterns (tap/select/toggle/save/delete/error/goal/streak/navigate/longPress/refresh) replacing raw `haptic(N)` calls
