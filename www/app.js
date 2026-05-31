@@ -185,6 +185,7 @@ let ui = {
 };
 let pieChart = null;
 let lineChart = null;
+let netWorthChart = null;
 let systemDarkMQ = null;
 let voiceRecognition = null;
 
@@ -1966,10 +1967,30 @@ function renderReports() {
     $('#cmpDiff').className = 'compare-diff';
   }
 
+  // Year-over-year comparison (12 months ago, same month)
+  const yoyRef = new Date(ref.getFullYear() - 1, ref.getMonth(), 1);
+  const yoyTx = state.expenses.filter(t => isInMonth(t.date, yoyRef) && t.type === 'expense');
+  const yoyExp = yoyTx.reduce((s,t) => s + t.amount, 0);
+  const yoyCard = $('#yoyCard');
+  if (yoyExp > 0) {
+    yoyCard.classList.remove('hidden');
+    $('#yoyPrev').textContent = moneyShort(yoyExp);
+    $('#yoyThis').textContent = moneyShort(expense);
+    const diff = expense - yoyExp;
+    const pct = Math.abs(diff / yoyExp * 100);
+    const up = diff > 0;
+    const el = $('#yoyDiff');
+    el.textContent = (up ? '↑ ' : '↓ ') + pct.toFixed(0) + '% (' + (up ? '+' : '−') + moneyShort(Math.abs(diff)) + ' vs ' + yoyRef.getFullYear() + ')';
+    el.className = 'compare-diff ' + (up ? 'up' : 'down');
+  } else {
+    yoyCard.classList.add('hidden');
+  }
+
   // Charts: only render if Chart.js loaded (lazy-load triggers re-render when ready)
   if (typeof window.Chart === 'function') {
     renderPieChart(monthTx);
     renderLineChart(ref);
+    renderNetWorthChart();
   }
 
   const top = monthTx.filter(t => t.type === 'expense')
@@ -2045,6 +2066,76 @@ function renderPieChart(monthTx) {
       ));
     });
   }
+}
+
+// Net worth = totalBalance computed at end of each of last 6 months.
+// Replays expenses chronologically and snapshots the running balance.
+function renderNetWorthChart() {
+  if (typeof window.Chart !== 'function') return;
+  const today = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const m = new Date(today.getFullYear(), today.getMonth() - i + 1, 0); // last day of that month
+    months.push(m);
+  }
+  // For each month-end, compute net worth: sum of (initialBalance + net of tx <= that date)
+  const accs = getAccounts().filter(a => a.includeInTotal !== false);
+  const data = months.map(monthEnd => {
+    return accs.reduce((sum, a) => {
+      let bal = a.initialBalance || 0;
+      state.expenses.forEach(t => {
+        if (new Date(t.date) > monthEnd) return;
+        if (t.type === 'transfer') {
+          if (t.fromAccountId === a.id) bal -= t.amount;
+          if (t.toAccountId === a.id)   bal += t.amount;
+        } else if (t.accountId === a.id) {
+          if (t.type === 'income')  bal += t.amount;
+          if (t.type === 'expense') bal -= t.amount;
+        }
+      });
+      return sum + bal;
+    }, 0);
+  });
+  const labels = months.map(m => m.toLocaleDateString('id-ID', { month: 'short' }));
+
+  if (netWorthChart) netWorthChart.destroy();
+  const ctx = $('#chartNetWorth')?.getContext('2d');
+  if (!ctx) return;
+  const txt = chartTextColor();
+  const grid = chartGridColor();
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#34c759';
+  netWorthChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Net Worth',
+        data, borderColor: accent,
+        backgroundColor: accent + '22',
+        fill: true, tension: 0.35, borderWidth: 2,
+        pointBackgroundColor: accent, pointBorderColor: accent, pointRadius: 3, pointHoverRadius: 5,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => money(ctx.raw) } }
+      },
+      scales: {
+        x: { ticks: { color: txt, font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: txt, font: { size: 10 }, callback: (v) => moneyShort(v).replace(/^.+\s/, '') }, grid: { color: grid } }
+      }
+    }
+  });
+
+  // Summary: change vs 6 months ago
+  const first = data[0], last = data[data.length - 1];
+  const diff = last - first;
+  const pct = first > 0 ? (diff / Math.abs(first)) * 100 : 0;
+  $('#netWorthSummary').innerHTML = diff >= 0
+    ? `<span style="color:var(--income)">↑ +${moneyShort(diff)} (${pct.toFixed(0)}%)</span> dari 6 bulan lalu`
+    : `<span style="color:var(--expense)">↓ ${moneyShort(diff)} (${pct.toFixed(0)}%)</span> dari 6 bulan lalu`;
 }
 
 function renderLineChart(refDate) {

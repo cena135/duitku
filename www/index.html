@@ -309,6 +309,27 @@
           <div class="compare-diff" id="cmpDiff">—</div>
         </div>
 
+        <div class="chart-card hidden" id="yoyCard">
+          <div class="chart-title">Tahun Lalu vs Sekarang</div>
+          <div class="compare-grid">
+            <div class="compare-col">
+              <div class="cc-label">12 bulan lalu</div>
+              <div class="cc-val expense-txt" id="yoyPrev">Rp 0</div>
+            </div>
+            <div class="compare-col">
+              <div class="cc-label">Bulan Ini</div>
+              <div class="cc-val expense-txt" id="yoyThis">Rp 0</div>
+            </div>
+          </div>
+          <div class="compare-diff" id="yoyDiff">—</div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">Net Worth 6 Bulan</div>
+          <div class="chart-wrap"><canvas id="chartNetWorth"></canvas></div>
+          <div id="netWorthSummary" style="font-size:13px;color:var(--label-2);text-align:center;margin-top:8px"></div>
+        </div>
+
         <div class="chart-card">
           <div class="chart-title">Per Kategori</div>
           <div class="chart-wrap"><canvas id="chartPie"></canvas></div>
