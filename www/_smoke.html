@@ -292,6 +292,30 @@
     return m && typeof m === 'object';
   });
 
+  section('ROUND 7 — sub snooze / weekend / price-change / tag merge / find-similar / heart burst');
+  check('snoozeSubNextRenewal exists', () => isFn(window, 'snoozeSubNextRenewal'));
+  check('renameCategoryInline exists', () => isFn(window, 'renameCategoryInline'));
+  check('mergeTags exists', () => isFn(window, 'mergeTags'));
+  check('openTagMergeModal exists', () => isFn(window, 'openTagMergeModal'));
+  check('computeWeekendWeekday returns full shape', () => {
+    const r = computeWeekendWeekday();
+    return r && 'weekend' in r && 'weekday' in r && 'weekendAvg' in r;
+  });
+  check('renderWeekendWeekdayCard exists', () => isFn(window, 'renderWeekendWeekdayCard'));
+  check('renderAccountSharePieData returns array', () => Array.isArray(renderAccountSharePieData()));
+  check('detectSubPriceChanges returns array', () => Array.isArray(detectSubPriceChanges()));
+  check('openSubPriceChangeModal exists', () => isFn(window, 'openSubPriceChangeModal'));
+  check('findSimilarTxs returns array', () => Array.isArray(findSimilarTxs({ name: 'x', type: 'expense', id: 'fake' })));
+  check('openQuickPayDebt exists', () => isFn(window, 'openQuickPayDebt'));
+  check('fireHeartBurst exists + safe to call without msg', () => {
+    fireHeartBurst();
+    return true;
+  });
+  check('auditFocusOrder returns { focusableCount, issues }', () => {
+    const r = auditFocusOrder();
+    return r && typeof r.focusableCount === 'number' && Array.isArray(r.issues);
+  });
+
   section('DOM smoke');
   check('renderReports does not throw', () => {
     try { renderReports(); } catch (e) {}

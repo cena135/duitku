@@ -1665,6 +1665,7 @@ function openSubContextMenu(s) {
     { label: 'Edit',  icon: '✏️', onClick: () => openSubModal(s) },
     { label: s.active === false ? 'Aktifkan' : 'Jeda', icon: s.active === false ? '▶️' : '⏸️',
       onClick: () => { s.active = !(s.active !== false); save(); render(); toast(s.active ? 'Diaktifkan' : 'Dijeda'); } },
+    { label: 'Lewati Renewal Ini', icon: '⏭️', onClick: () => snoozeSubNextRenewal(s) },
     { label: 'Tandai Sudah Bayar', icon: '✅', onClick: () => advanceSub(s) },
     { label: 'Hapus', icon: '🗑️', destructive: true, onClick: () => deleteSub(s.id) },
   ]);
@@ -1674,6 +1675,7 @@ function openDebtContextMenu(d) {
   const isPaid = debtIsPaid(d);
   openActionSheet(d.person + ' — ' + money(debtRemaining(d)), [
     { label: 'Edit', icon: '✏️', onClick: () => openDebtModal(d) },
+    !isPaid && { label: 'Bayar Cepat', icon: '⚡', onClick: () => openQuickPayDebt(d) },
     !isPaid && { label: 'Catat Pembayaran', icon: '💰',
       onClick: () => { openDebtModal(d); /* user can tap Catat Pembayaran inside */ } },
     { label: 'Hapus', icon: '🗑️', destructive: true, onClick: () => deleteDebt(d.id) },
@@ -2326,6 +2328,8 @@ function renderReports() {
   // Round 6 — weekly velocity + category trend
   renderWeeklyVelocityCard();
   renderCategoryTrendCard();
+  // Round 7 — weekend vs weekday
+  renderWeekendWeekdayCard();
 
   const top = monthTx.filter(t => t.type === 'expense')
     .sort((a,b) => b.amount - a.amount).slice(0, 5);
@@ -6226,6 +6230,286 @@ function measurePerformance() {
   return samples;
 }
 
+// ========== ROUND 7 — Cycle 1: Sub snooze (skip next renewal only) ==========
+
+function snoozeSubNextRenewal(s) {
+  if (!s) return;
+  const before = s.nextRenewal;
+  advanceSub(s);
+  pushUndo(`Skip renewal "${s.name}"`, () => { s.nextRenewal = before; save(); render(); });
+  toast.info(`Renewal berikutnya dilewati. Berikutnya: ${shortDate(s.nextRenewal)}`);
+}
+
+// ========== ROUND 7 — Cycle 1: Quick category rename inline ==========
+
+function renameCategoryInline(type, catId) {
+  const cat = getCategory(type, catId);
+  if (!cat) return;
+  const newName = prompt(`Ganti nama "${cat.name}":`, cat.name);
+  if (!newName || !newName.trim() || newName.trim() === cat.name) return;
+  state.settings.customCategories = state.settings.customCategories || {};
+  state.settings.customCategories[type] = state.settings.customCategories[type] || [];
+  const ovr = state.settings.customCategories[type].find(c => c.id === catId);
+  if (ovr) ovr.name = newName.trim();
+  else state.settings.customCategories[type].push({ ...cat, name: newName.trim() });
+  save(); hap('save'); render();
+  toast.success(`Kategori diganti: "${newName.trim()}"`);
+}
+
+// ========== ROUND 7 — Cycle 1: Tag merge tool ==========
+
+function mergeTags(sourceTagId, targetTagId) {
+  if (sourceTagId === targetTagId) return;
+  const source = getTag(sourceTagId);
+  const target = getTag(targetTagId);
+  if (!source || !target) return;
+  let migrated = 0;
+  state.expenses.forEach(t => {
+    if (!Array.isArray(t.tags)) return;
+    const idx = t.tags.indexOf(sourceTagId);
+    if (idx >= 0) {
+      t.tags.splice(idx, 1);
+      if (!t.tags.includes(targetTagId)) t.tags.push(targetTagId);
+      migrated++;
+    }
+  });
+  state.tags = state.tags.filter(x => x.id !== sourceTagId);
+  save(); hap('save'); render();
+  toast.success(`"${source.name}" digabung ke "${target.name}" (${migrated} tx)`);
+}
+
+function openTagMergeModal() {
+  const tags = getTags();
+  if (tags.length < 2) { toast.info('Butuh ≥ 2 tag untuk merge'); return; }
+  hap('navigate');
+  let sourceId = tags[0].id, targetId = tags[1].id;
+  const tagChip = (sel, current, setter) => {
+    const wrap = el('div', { class: 'chip-multi' });
+    tags.forEach(t => {
+      const c = el('button', {
+        type: 'button',
+        class: 'chip-multi-item' + (sel(t.id) ? ' active' : ''),
+        style: `--chip-color:${t.color || '#888'}`,
+        onclick: () => {
+          setter(t.id);
+          wrap.querySelectorAll('.chip-multi-item').forEach(x => x.classList.remove('active'));
+          c.classList.add('active');
+        }
+      }, '#' + t.name);
+      wrap.appendChild(c);
+    });
+    return wrap;
+  };
+  const body = el('div',
+    { class: 'adv-filter-body' },
+    el('div', { class: 'field-group' },
+      el('label', {}, 'Tag asal (akan dihapus)'),
+      tagChip(id => id === sourceId, sourceId, id => sourceId = id)
+    ),
+    el('div', { class: 'field-group' },
+      el('label', {}, 'Tag tujuan (semua tx pindah ke sini)'),
+      tagChip(id => id === targetId, targetId, id => targetId = id)
+    ),
+  );
+  showModal({
+    title: 'Gabung Tag',
+    body,
+    save: () => {
+      if (sourceId === targetId) { toast.warning('Pilih tag berbeda'); return; }
+      mergeTags(sourceId, targetId);
+    }
+  });
+}
+
+// ========== ROUND 7 — Cycle 2: Weekend vs weekday breakdown ==========
+
+function computeWeekendWeekday() {
+  const ref = getMonthDate(0);
+  const txs = state.expenses.filter(t => isInMonth(t.date, ref) && t.type === 'expense');
+  let wknd = 0, wkdy = 0, wkndCount = 0, wkdyCount = 0;
+  txs.forEach(t => {
+    const dow = new Date(t.date).getDay();
+    if (dow === 0 || dow === 6) { wknd += t.amount; wkndCount++; }
+    else { wkdy += t.amount; wkdyCount++; }
+  });
+  return {
+    weekend: wknd, weekday: wkdy,
+    weekendCount: wkndCount, weekdayCount: wkdyCount,
+    weekendAvg: wkndCount ? wknd / wkndCount : 0,
+    weekdayAvg: wkdyCount ? wkdy / wkdyCount : 0,
+  };
+}
+
+function renderWeekendWeekdayCard() {
+  const host = $('#weekendWeekdayCard');
+  if (!host) return;
+  const r = computeWeekendWeekday();
+  host.innerHTML = '';
+  if (r.weekend + r.weekday === 0) {
+    host.appendChild(el('div', { class: 'muted-txt' }, 'Belum ada pengeluaran bulan ini'));
+    return;
+  }
+  const total = r.weekend + r.weekday;
+  const wkndPct = (r.weekend / total) * 100;
+  host.appendChild(el('div', { class: 'wkw-row' },
+    el('div', { class: 'wkw-label' }, '🛋️ Akhir pekan'),
+    el('div', { class: 'wkw-amt' }, moneyShort(r.weekend) + ' (' + wkndPct.toFixed(0) + '%)')
+  ));
+  host.appendChild(el('div', { class: 'wkw-row' },
+    el('div', { class: 'wkw-label' }, '💼 Hari kerja'),
+    el('div', { class: 'wkw-amt' }, moneyShort(r.weekday) + ' (' + (100 - wkndPct).toFixed(0) + '%)')
+  ));
+  host.appendChild(el('div', { class: 'wkw-bar' },
+    el('div', { class: 'wkw-bar-wknd', style: `width:${wkndPct}%` })
+  ));
+  if (r.weekendAvg > 0 && r.weekdayAvg > 0) {
+    const ratio = r.weekendAvg / r.weekdayAvg;
+    host.appendChild(el('div', { class: 'muted-txt', style: 'margin-top:8px;font-size:12px' },
+      `Rata-rata tx: weekend ${moneyShort(r.weekendAvg)} vs weekday ${moneyShort(r.weekdayAvg)} (${ratio.toFixed(1)}×)`));
+  }
+}
+
+// ========== ROUND 7 — Cycle 2: Account share donut ==========
+
+function renderAccountSharePieData() {
+  const data = state.accounts.filter(a => !a.archived && a.includeInTotal !== false)
+    .map(a => ({ name: a.name, balance: Math.max(0, accountBalance(a)) }))
+    .filter(d => d.balance > 0)
+    .sort((a, b) => b.balance - a.balance);
+  return data;
+}
+
+// ========== ROUND 7 — Cycle 2: Subscription price change tracker ==========
+
+function detectSubPriceChanges() {
+  // Look at txs auto-generated by recurring subs (name match)
+  const changes = [];
+  state.subscriptions.forEach(sub => {
+    const matches = state.expenses
+      .filter(t => t.type !== 'transfer' && (t.name || '').toLowerCase() === (sub.name || '').toLowerCase())
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (matches.length < 2) return;
+    const amounts = matches.map(m => m.amount);
+    const uniqueAmounts = [...new Set(amounts)];
+    if (uniqueAmounts.length > 1) {
+      const oldest = matches[0].amount;
+      const latest = matches[matches.length - 1].amount;
+      if (oldest !== latest) {
+        const pct = ((latest - oldest) / oldest) * 100;
+        changes.push({ sub, oldest, latest, pct, samples: matches.length });
+      }
+    }
+  });
+  return changes;
+}
+
+function openSubPriceChangeModal() {
+  const changes = detectSubPriceChanges();
+  if (!changes.length) { toast.info('Tidak ada perubahan harga langganan terdeteksi'); return; }
+  hap('navigate');
+  const body = el('div', { class: 'price-change-list' });
+  changes.forEach(c => {
+    const up = c.latest > c.oldest;
+    body.appendChild(el('div', { class: 'price-change-row' },
+      el('div', { class: 'pc-meta' },
+        el('div', { class: 'pc-name' }, (up ? '📈 ' : '📉 ') + c.sub.name),
+        el('div', { class: 'pc-sub muted-txt' },
+          `${money(c.oldest)} → ${money(c.latest)} (${c.pct > 0 ? '+' : ''}${c.pct.toFixed(0)}%, ${c.samples}× muncul)`)
+      )
+    ));
+  });
+  showModal({ title: 'Perubahan Harga Langganan', body, save: null });
+}
+
+// ========== ROUND 7 — Cycle 4: Find similar tx (when editing) ==========
+
+function findSimilarTxs(tx, limit = 5) {
+  if (!tx || !tx.name) return [];
+  const needle = tx.name.toLowerCase().trim();
+  return state.expenses
+    .filter(t => t.id !== tx.id && t.type === tx.type && (t.name || '').toLowerCase().includes(needle))
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, limit);
+}
+
+// ========== ROUND 7 — Cycle 4: Quick-pay debt with one-click tx ==========
+
+function openQuickPayDebt(debt) {
+  if (!debt) return;
+  const paid = (debt.payments || []).reduce((s, p) => s + p.amount, 0);
+  const remaining = debt.originalAmount - paid;
+  if (remaining <= 0) { toast.info('Hutang sudah lunas'); return; }
+  let chosenAcc = state.settings.defaultAccountId;
+  let amt = remaining;
+  const amtInput = el('input', { type: 'number', value: amt, inputmode: 'numeric' });
+  amtInput.addEventListener('input', () => { amt = Number(amtInput.value) || 0; });
+  const accPicker = buildAccountPicker(() => chosenAcc, (id) => { chosenAcc = id; });
+  const body = el('div',
+    el('div', { class: 'field-group' },
+      el('label', {}, `Sisa ${money(remaining)}`),
+      amtInput
+    ),
+    el('div', { class: 'field-group' },
+      el('label', {}, 'Dari akun'),
+      accPicker
+    ),
+  );
+  showModal({
+    title: `Bayar ${debt.type === 'i_owe' ? 'hutang ke' : 'piutang dari'} ${debt.person}`,
+    body,
+    save: () => {
+      if (amt <= 0) { toast.warning('Jumlah harus > 0'); return; }
+      if (amt > remaining) { toast.warning('Lebih dari sisa hutang'); return; }
+      debt.payments = debt.payments || [];
+      debt.payments.push({ amount: amt, date: isoDate(), accountId: chosenAcc });
+      save(); hap('save'); render();
+      toast.success(`Pembayaran ${money(amt)} dicatat`);
+    }
+  });
+}
+
+// ========== ROUND 7 — Cycle 3: Heart burst on milestone alt ==========
+
+function fireHeartBurst(message) {
+  const host = $('#confettiHost') || document.body;
+  const overlay = el('div', { class: 'heart-burst-overlay' });
+  for (let i = 0; i < 12; i++) {
+    const heart = el('div', { class: 'heart-particle' }, '❤️');
+    heart.style.setProperty('--angle', (i * 30) + 'deg');
+    heart.style.setProperty('--delay', (i * 30) + 'ms');
+    overlay.appendChild(heart);
+  }
+  if (message) overlay.appendChild(el('div', { class: 'heart-msg' }, message));
+  host.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 1500);
+  hap('goal');
+}
+
+// ========== ROUND 7 — Cycle 5: A11y focus order audit ==========
+
+function auditFocusOrder() {
+  const focusable = document.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  const issues = [];
+  let prevRect = null;
+  focusable.forEach((el, idx) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    if (prevRect) {
+      // Flag if tab order jumps backwards by >100px vertically
+      if (rect.top < prevRect.top - 100) {
+        issues.push({ idx, el: el.tagName + (el.id ? '#' + el.id : ''), reason: 'jumps up unexpectedly' });
+      }
+    }
+    prevRect = rect;
+    if (el.tagName === 'BUTTON' && !el.textContent.trim() && !el.getAttribute('aria-label')) {
+      issues.push({ idx, el: 'button', reason: 'no label or aria-label' });
+    }
+  });
+  return { focusableCount: focusable.length, issues };
+}
+
 // ========== ROUND 2 — Cycle 5: Backup reminder banner ==========
 
 function maybeShowBackupReminder() {
@@ -6695,6 +6979,8 @@ function init() {
   $('#cellTemplates')?.addEventListener('click', openTemplatePicker);
   $('#cellRecurringSuggest')?.addEventListener('click', openRecurringSuggestionModal);
   $('#cellBudgetRec')?.addEventListener('click', openBudgetRecommendationModal);
+  $('#cellPriceChange')?.addEventListener('click', openSubPriceChangeModal);
+  $('#cellTagMerge')?.addEventListener('click', openTagMergeModal);
 
   // Round 4: A11y toggles
   const hcInput = $('#toggleHighContrast');

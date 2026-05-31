@@ -3184,3 +3184,46 @@ html.a11y-larger-text input, html.a11y-larger-text button { font-size: 16px; }
   100% { box-shadow: 0 0 0 14px transparent; }
 }
 .accent-pulse { animation: accent-pulse-kf .5s ease-out; }
+
+/* ============================================================
+   ROUND 7 — weekend split / price change / heart burst / tag merge
+   ============================================================ */
+.wkw-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
+.wkw-label { color: var(--label-1); }
+.wkw-amt { font-weight: 600; }
+.wkw-bar { height: 8px; background: color-mix(in srgb, var(--accent) 30%, var(--fill-2)); border-radius: 4px; margin-top: 4px; overflow: hidden; }
+.wkw-bar-wknd { height: 100%; background: var(--accent); border-radius: 4px; transition: width .4s; }
+
+.price-change-list { display: flex; flex-direction: column; gap: 8px; }
+.price-change-row {
+  padding: 12px; background: var(--fill-1); border: 1px solid var(--separator);
+  border-radius: 12px;
+}
+.pc-name { font-size: 14px; font-weight: 600; }
+.pc-sub { font-size: 12px; margin-top: 4px; }
+
+.heart-burst-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+}
+.heart-particle {
+  position: absolute; left: 50%; top: 50%; font-size: 28px;
+  animation: heart-fly 1.4s ease-out forwards;
+  animation-delay: var(--delay, 0ms);
+  transform-origin: 0 0;
+}
+@keyframes heart-fly {
+  0%   { opacity: 0; transform: translate(-50%,-50%) rotate(var(--angle)) translateX(0); }
+  20%  { opacity: 1; transform: translate(-50%,-50%) rotate(var(--angle)) translateX(20px); }
+  100% { opacity: 0; transform: translate(-50%,-50%) rotate(var(--angle)) translateX(160px) scale(.6); }
+}
+.heart-msg {
+  position: relative; background: var(--card-bg, #2c2c2e); color: var(--label-1);
+  padding: 14px 22px; border-radius: 16px; font-size: 16px; font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0,0,0,.3);
+  animation: heart-msg-pop .4s cubic-bezier(.32,.72,0,1);
+}
+@keyframes heart-msg-pop {
+  from { opacity: 0; transform: scale(.7); }
+  to { opacity: 1; transform: scale(1); }
+}
