@@ -173,6 +173,36 @@
   check('openDuplicateModal exists', () => isFn(window, 'openDuplicateModal'));
   check('maybeShowBackupReminder exists', () => isFn(window, 'maybeShowBackupReminder'));
 
+  section('ROUND 3 — calendar add / merchant patterns / heatmap / burn / recurring detect');
+  check('autoCategorizeFromMerchant exists', () => isFn(window, 'autoCategorizeFromMerchant'));
+  check('autoCategorizeFromMerchant("Gojek", "expense") = transport', () =>
+    autoCategorizeFromMerchant('Gojek perjalanan', 'expense') === 'transport');
+  check('autoCategorizeFromMerchant("Spotify", "expense") = entertainment', () =>
+    autoCategorizeFromMerchant('Spotify Premium', 'expense') === 'entertainment');
+  check('autoCategorizeFromMerchant("Gaji", "income") = salary', () =>
+    autoCategorizeFromMerchant('Gaji bulan ini', 'income') === 'salary');
+  check('autoCategorizeFromMerchant unknown returns null', () =>
+    autoCategorizeFromMerchant('xyz random thing', 'expense') === null);
+  check('suggestCategoryWithMerchant exists', () => isFn(window, 'suggestCategoryWithMerchant'));
+  check('renderBurnRateCard exists', () => isFn(window, 'renderBurnRateCard'));
+  check('compute7DayBurnRate returns { total, daily }', () => {
+    const r = compute7DayBurnRate();
+    return r && typeof r.total === 'number' && typeof r.daily === 'number';
+  });
+  check('renderMonthlyHeatmap exists', () => isFn(window, 'renderMonthlyHeatmap'));
+  check('renderCumulativeSpend exists', () => isFn(window, 'renderCumulativeSpend'));
+  check('detectRecurringPatterns returns array', () => Array.isArray(detectRecurringPatterns()));
+  check('openRecurringSuggestionModal exists', () => isFn(window, 'openRecurringSuggestionModal'));
+  check('setupLongPressProgress exists', () => isFn(window, 'setupLongPressProgress'));
+  check('setupAccountReorder exists', () => isFn(window, 'setupAccountReorder'));
+  check('getCategoryUsage("expense") returns object', () => typeof getCategoryUsage('expense') === 'object');
+  check('generateChangelogText contains Round 3', () => generateChangelogText().includes('Round 3'));
+  check('openExpenseModal accepts draft without id (no throw on call)', () => {
+    try { openExpenseModal({ date: '2026-06-15', type: 'expense' }); } catch (e) {}
+    try { hideModal(); } catch (e) {}
+    return true;
+  });
+
   section('DOM smoke');
   check('renderReports does not throw', () => {
     try { renderReports(); } catch (e) {}

@@ -84,6 +84,11 @@
 
         <div id="insightCard" class="hidden"></div>
         <div id="statsWidget" class="hidden"></div>
+        <div id="burnRateCard" class="burn-card"></div>
+        <div class="heatmap-card">
+          <div class="chart-title" style="margin-bottom:8px">Heatmap Bulan Ini</div>
+          <div id="monthlyHeatmap"></div>
+        </div>
 
         <div class="grid-2">
           <div class="stat-card">
@@ -388,6 +393,11 @@
           <div class="chart-wrap"><canvas></canvas></div>
         </div>
 
+        <div class="chart-card" id="cumulativeSpendCard">
+          <div class="chart-title">Kumulatif Pengeluaran (vs Bulan Lalu)</div>
+          <div class="chart-wrap"><canvas></canvas></div>
+        </div>
+
         <div class="chart-card">
           <div class="chart-title">Top 5 Pengeluaran Terbesar</div>
           <div id="topExpensesCard"></div>
@@ -642,6 +652,16 @@
               <div class="cell-main">
                 <div class="cell-title">Deteksi Duplikat</div>
                 <div class="cell-sub">Cari transaksi terduplikasi</div>
+              </div>
+              <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="cell" id="cellRecurringSuggest">
+              <div class="cell-icon" style="background:#af52de">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              </div>
+              <div class="cell-main">
+                <div class="cell-title">Saran Langganan</div>
+                <div class="cell-sub">Deteksi pola tx berulang</div>
               </div>
               <svg class="cell-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </div>

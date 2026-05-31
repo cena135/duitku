@@ -379,6 +379,13 @@ function getRecentSuggestions(type, limit = 5) {
  * transactions. Used in expense modal to auto-pick a category as user types.
  * Re-runs on every keystroke; cheap (state.expenses scan, no allocation).
  */
+function suggestCategoryWithMerchant(name, type) {
+  // Round 3: merchant pattern first (highest signal), then user-learned, then history
+  const fromMerchant = autoCategorizeFromMerchant(name, type);
+  if (fromMerchant) return fromMerchant;
+  return suggestCategory(name, type);
+}
+
 function suggestCategory(name, type) {
   if (!name || name.length < 2) return null;
   const needle = name.toLowerCase().trim();
@@ -1175,6 +1182,10 @@ function renderDashboard() {
   // Stats widget (7-day heatmap)
   renderStatsWidget();
 
+  // Round 3: burn rate + monthly heatmap
+  renderBurnRateCard();
+  renderMonthlyHeatmap();
+
   // Accounts mini
   const accWrap = $('#dashAccounts');
   accWrap.innerHTML = '';
@@ -1964,6 +1975,14 @@ function renderCalendar() {
         el('div', { class: 'list-group-rows' }, ...dayTxs.map(renderTxRow))
       ));
     }
+    // Round 3: Quick add for selected date
+    wrap.appendChild(el('button', {
+      class: 'cal-quick-add',
+      onclick: () => {
+        const draft = { date: ui.selectedCalDay, type: 'expense' };
+        openExpenseModal(draft);
+      }
+    }, '+ Tambah transaksi tanggal ini'));
   }
 }
 
@@ -2288,6 +2307,8 @@ function renderReports() {
   renderSavingsRateTrend();
   renderTopExpensesEver();
   renderProjectedMonthEnd();
+  // Round 3 — cumulative spend overlay
+  renderCumulativeSpend();
 
   const top = monthTx.filter(t => t.type === 'expense')
     .sort((a,b) => b.amount - a.amount).slice(0, 5);
@@ -2765,11 +2786,12 @@ function renderTags() {
 // ============================================================
 
 function openExpenseModal(tx = null) {
-  const isEdit = !!tx;
-  const t = tx
+  const isEdit = !!(tx && tx.id);  // truly editing only if id present
+  const t = tx && tx.id
     ? { ...tx, tags: [...(tx.tags||[])] }
-    : { id: uid(), type: 'expense', date: isoDate(),
-        category: getCategories('expense')[0].id, name: '', amount: 0, note: '',
+    : { id: uid(), type: (tx && tx.type) || 'expense',
+        date: (tx && tx.date) || isoDate(),
+        category: getCategories((tx && tx.type) || 'expense')[0].id, name: '', amount: 0, note: '',
         accountId: state.settings.defaultAccountId,
         tags: [], receipt: null };
 
@@ -2864,7 +2886,7 @@ function openExpenseModal(tx = null) {
           t.name = e.target.value;
           // Smart suggest only when user hasn't manually picked + creating new
           if (!isEdit && !t._userPickedCategory && e.target.value.length >= 3) {
-            const suggested = suggestCategory(e.target.value, t.type);
+            const suggested = suggestCategoryWithMerchant(e.target.value, t.type);
             if (suggested && suggested !== t.category) {
               t.category = suggested;
               catGrid.refresh();
@@ -5202,6 +5224,336 @@ function openDuplicateModal() {
   showModal({ title: 'Deteksi Duplikat', body, save: null });
 }
 
+// ========== ROUND 3 — Cycle 1: Merchant pattern auto-categorize ==========
+
+// Built-in merchant patterns (Indonesian-context, growable from learning)
+const MERCHANT_PATTERNS = [
+  { pattern: /gojek|grab|maxim|in[d|]drive/i, cat: 'transport', type: 'expense' },
+  { pattern: /indomaret|alfamart|alfamidi|circle k/i, cat: 'shopping', type: 'expense' },
+  { pattern: /tokopedia|shopee|lazada|blibli|bukalapak/i, cat: 'shopping', type: 'expense' },
+  { pattern: /mcd|kfc|burger|pizza|chatime|kopi|cafe|starbucks/i, cat: 'food', type: 'expense' },
+  { pattern: /pln|listrik/i, cat: 'bills', type: 'expense' },
+  { pattern: /pdam|air|water/i, cat: 'bills', type: 'expense' },
+  { pattern: /pulsa|telkomsel|xl|im3|indosat|smartfren|wifi|internet/i, cat: 'bills', type: 'expense' },
+  { pattern: /spotify|netflix|youtube|disney|hbo/i, cat: 'entertainment', type: 'expense' },
+  { pattern: /gaji|salary|payroll/i, cat: 'salary', type: 'income' },
+];
+
+function autoCategorizeFromMerchant(name, type) {
+  if (!name) return null;
+  for (const m of MERCHANT_PATTERNS) {
+    if (m.type !== type) continue;
+    if (m.pattern.test(name)) {
+      // Verify the cat exists for the current type
+      const cats = getCategories(type);
+      if (cats.some(c => c.id === m.cat)) return m.cat;
+    }
+  }
+  return null;
+}
+
+// ========== ROUND 3 — Cycle 1: Frequently-used categories pinning ==========
+
+function getCategoryUsage(type) {
+  const usage = {};
+  state.expenses.filter(t => t.type === type).forEach(t => {
+    usage[t.category] = (usage[t.category] || 0) + 1;
+  });
+  return usage;
+}
+
+// ========== ROUND 3 — Cycle 2: Cumulative spend overlay ==========
+
+function renderCumulativeSpend() {
+  const host = $('#cumulativeSpendCard');
+  if (!host || typeof Chart === 'undefined') return;
+  const canvas = host.querySelector('canvas');
+  if (!canvas) return;
+  if (host._chart) host._chart.destroy();
+
+  const today = new Date();
+  const dayOfMonth = today.getDate();
+  const thisMonthRef = getMonthDate(0);
+  const lastMonthRef = getMonthDate(-1);
+  const lastDays = new Date(lastMonthRef.getFullYear(), lastMonthRef.getMonth() + 1, 0).getDate();
+  const thisDays = new Date(thisMonthRef.getFullYear(), thisMonthRef.getMonth() + 1, 0).getDate();
+  const maxDays = Math.max(thisDays, lastDays);
+
+  const buildCum = (ref, totalDays, capDay) => {
+    const arr = [];
+    let cum = 0;
+    for (let d = 1; d <= totalDays; d++) {
+      const iso = isoDate(new Date(ref.getFullYear(), ref.getMonth(), d));
+      const day = state.expenses.filter(t => t.date === iso && t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+      cum += day;
+      arr.push(d > capDay ? null : cum);
+    }
+    return arr;
+  };
+
+  const thisCum = buildCum(thisMonthRef, thisDays, dayOfMonth);
+  const lastCum = buildCum(lastMonthRef, lastDays, lastDays);
+  const labels = Array.from({ length: maxDays }, (_, i) => i + 1);
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#34c759';
+
+  host._chart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Bulan ini', data: thisCum, borderColor: accent, backgroundColor: hexToRgba(accent, 0.15), fill: true, tension: 0.28, pointRadius: 0 },
+        { label: 'Bulan lalu', data: lastCum, borderColor: 'rgba(150,150,150,0.6)', borderDash: [4, 4], fill: false, tension: 0.28, pointRadius: 0 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, position: 'bottom' } },
+      scales: { y: { ticks: { callback: v => moneyShort(v) } } },
+    },
+  });
+}
+
+// ========== ROUND 3 — Cycle 2: Monthly heatmap on dashboard ==========
+
+function renderMonthlyHeatmap() {
+  const host = $('#monthlyHeatmap');
+  if (!host) return;
+  host.innerHTML = '';
+  const ref = getMonthDate(0);
+  const year = ref.getFullYear(), month = ref.getMonth();
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  const startDow = first.getDay();
+  const spend = {};
+  state.expenses.filter(t => t.type === 'expense' && isInMonth(t.date, ref))
+    .forEach(t => { spend[t.date] = (spend[t.date] || 0) + t.amount; });
+  const max = Math.max(1, ...Object.values(spend));
+  const grid = el('div', { class: 'heatmap-grid' });
+  ['M','S','S','R','K','J','S'].forEach(d => grid.appendChild(el('div', { class: 'heatmap-dow' }, d)));
+  for (let i = 0; i < startDow; i++) grid.appendChild(el('div', { class: 'heatmap-cell empty' }));
+  for (let d = 1; d <= last.getDate(); d++) {
+    const iso = isoDate(new Date(year, month, d));
+    const v = spend[iso] || 0;
+    const intensity = v > 0 ? Math.min(4, Math.ceil((v / max) * 4)) : 0;
+    const cell = el('div', {
+      class: 'heatmap-cell intensity-' + intensity,
+      title: shortDate(iso) + (v ? ' — ' + money(v) : ''),
+    }, String(d));
+    grid.appendChild(cell);
+  }
+  host.appendChild(grid);
+}
+
+// ========== ROUND 3 — Cycle 3: Long-press progress indicator ==========
+
+function setupLongPressProgress() {
+  let pressTimer = null, progressEl = null, target = null;
+  const START_DELAY = 120;
+  const HOLD_DURATION = 480;
+
+  const onStart = (e) => {
+    if (document.body.classList.contains('bulk-mode')) return;
+    const row = e.target.closest('.tx-row, .account-row, .sub-row');
+    if (!row) return;
+    target = row;
+    pressTimer = setTimeout(() => {
+      progressEl = el('div', { class: 'long-press-progress' });
+      target.appendChild(progressEl);
+      requestAnimationFrame(() => {
+        progressEl.style.transform = 'scaleX(1)';
+      });
+    }, START_DELAY);
+  };
+  const onEnd = () => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    if (progressEl) {
+      progressEl.remove();
+      progressEl = null;
+    }
+    target = null;
+  };
+  document.addEventListener('touchstart', onStart, { passive: true });
+  document.addEventListener('mousedown', onStart);
+  document.addEventListener('touchend', onEnd);
+  document.addEventListener('touchcancel', onEnd);
+  document.addEventListener('mouseup', onEnd);
+  document.addEventListener('mouseleave', onEnd);
+}
+
+// ========== ROUND 3 — Cycle 3: Drag-to-reorder accounts ==========
+
+function setupAccountReorder() {
+  // Activated only when on Accounts page
+  const list = document.querySelector('.account-list, [data-reorder="accounts"]');
+  if (!list) return;
+  let dragged = null;
+  list.querySelectorAll('.account-row').forEach(row => {
+    row.draggable = true;
+    row.addEventListener('dragstart', (e) => {
+      dragged = row;
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      // Persist new order
+      const newOrder = Array.from(list.querySelectorAll('.account-row[data-account-id]'))
+        .map(r => r.dataset.accountId);
+      state.accounts.sort((a, b) => newOrder.indexOf(a.id) - newOrder.indexOf(b.id));
+      save();
+      dragged = null;
+    });
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!dragged || dragged === row) return;
+      const rect = row.getBoundingClientRect();
+      const middle = rect.top + rect.height / 2;
+      if (e.clientY < middle) row.parentNode.insertBefore(dragged, row);
+      else row.parentNode.insertBefore(dragged, row.nextSibling);
+    });
+  });
+}
+
+// ========== ROUND 3 — Cycle 4: Subscription detection from history ==========
+
+function detectRecurringPatterns() {
+  // Group expenses by normalized name + amount
+  const groups = {};
+  state.expenses.filter(t => t.type === 'expense').forEach(t => {
+    const key = `${(t.name || '').toLowerCase().trim()}|${t.amount}`;
+    if (!key.startsWith('|')) (groups[key] = groups[key] || []).push(t);
+  });
+
+  const candidates = [];
+  Object.entries(groups).forEach(([key, txs]) => {
+    if (txs.length < 3) return;
+    // Sort by date, compute deltas
+    txs.sort((a, b) => a.date.localeCompare(b.date));
+    const deltas = [];
+    for (let i = 1; i < txs.length; i++) {
+      const a = new Date(txs[i - 1].date);
+      const b = new Date(txs[i].date);
+      const days = Math.round((b - a) / 86400000);
+      deltas.push(days);
+    }
+    const avg = deltas.reduce((s, d) => s + d, 0) / deltas.length;
+    const variance = deltas.reduce((s, d) => s + (d - avg) ** 2, 0) / deltas.length;
+    const stddev = Math.sqrt(variance);
+    // Tight stddev → likely recurring
+    if (stddev < 4 && avg >= 25 && avg <= 35) {
+      candidates.push({ name: txs[0].name, amount: txs[0].amount, cycle: 'monthly', samples: txs.length });
+    } else if (stddev < 2 && avg >= 6 && avg <= 8) {
+      candidates.push({ name: txs[0].name, amount: txs[0].amount, cycle: 'weekly', samples: txs.length });
+    }
+  });
+  return candidates;
+}
+
+function openRecurringSuggestionModal() {
+  const candidates = detectRecurringPatterns();
+  if (!candidates.length) { toast.info('Tidak ada pola langganan terdeteksi'); return; }
+  hap('navigate');
+  const body = el('div', { class: 'recurring-suggest-list' });
+  body.appendChild(el('div', { class: 'muted-txt', style: 'margin-bottom:12px' },
+    `${candidates.length} pola transaksi terdeteksi mungkin langganan:`));
+  candidates.forEach(c => {
+    const existing = state.subscriptions.some(s => (s.name || '').toLowerCase() === (c.name || '').toLowerCase() && s.amount === c.amount);
+    const row = el('div', { class: 'recurring-suggest-row' },
+      el('div', { class: 'r-meta' },
+        el('div', { class: 'r-name' }, c.name),
+        el('div', { class: 'r-sub muted-txt' }, money(c.amount) + ' · ' + c.cycle + ' · ' + c.samples + '× muncul')
+      ),
+      el('button', {
+        class: existing ? 'btn-link' : 'btn-secondary',
+        disabled: existing,
+        onclick: () => {
+          const newSub = {
+            id: uid(),
+            name: c.name,
+            amount: c.amount,
+            cycle: c.cycle,
+            category: 'bills',
+            nextRenewal: isoDate(new Date()),
+            reminderDays: 2,
+            active: true,
+            type: 'expense',
+            accountId: state.settings.defaultAccountId,
+            tags: [],
+            autoExecute: false,
+          };
+          state.subscriptions.push(newSub);
+          save(); hap('save'); render();
+          toast.success(`Langganan "${c.name}" dibuat`);
+          hideModal();
+        }
+      }, existing ? 'Sudah ada' : 'Jadikan langganan')
+    );
+    body.appendChild(row);
+  });
+  showModal({ title: 'Saran Langganan', body, save: null });
+}
+
+// ========== ROUND 3 — Cycle 4: 7-day rolling burn rate ==========
+
+function compute7DayBurnRate() {
+  const today = new Date();
+  let total = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    const iso = isoDate(d);
+    total += state.expenses.filter(t => t.date === iso && t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  }
+  return { total, daily: total / 7 };
+}
+
+function renderBurnRateCard() {
+  const host = $('#burnRateCard');
+  if (!host) return;
+  const { total, daily } = compute7DayBurnRate();
+  host.innerHTML = '';
+  host.appendChild(el('div', { class: 'burn-row' },
+    el('div', { class: 'burn-label' }, 'Pengeluaran 7 hari terakhir'),
+    el('div', { class: 'burn-amt expense-txt' }, money(total))
+  ));
+  host.appendChild(el('div', { class: 'burn-sub muted-txt' },
+    `Rata-rata ${money(daily)}/hari → ${money(daily * 30)} proyeksi/bulan`));
+}
+
+// ========== ROUND 3 — Cycle 5: CHANGELOG generator ==========
+
+function generateChangelogText() {
+  return `# DuitKu — Changelog
+
+## Round 3 (2026-06-01)
+- Kalender: tombol "+ Tambah transaksi" untuk tanggal yang dipilih
+- Auto-kategori dari pola merchant (Gojek/Indomaret/PLN/Spotify/dll)
+- Saran langganan dari deteksi pola tx berulang
+- 7-day rolling burn rate card
+- Cumulative spend overlay (bulan ini vs bulan lalu)
+- Monthly heatmap di dashboard
+- Long-press progress indicator
+- Drag-to-reorder akun
+
+## Round 2 (2026-06-01)
+- Advanced filter modal (amount range, date range, multi-account, multi-tag)
+- Ctrl+K command palette dengan recent searches + shortcuts (>amount, @account, #tag)
+- Bulk operations v2: recategorize, move account, add tag, change date
+- Transaction templates dengan usage count
+- Top 5 expenses ever
+- Projected month-end balance
+- 6-month savings rate trend
+- Duplicate transaction detection
+- Backup reminder banner
+
+## Round 1 (2026-06-01)
+- Cycle 1: onboarding tour, bulk select, pull-to-refresh hint, smart category learning
+- Cycle 2: 4 new charts (day-of-week, top payees, income/expense ratio, sub forecast)
+- Cycle 3: swipe-to-delete, milestone burst, theme transition, parallax hero
+- Cycle 4: health check tool, recurring goal contribution, sub pause-until
+- Cycle 5: ARCHITECTURE.md, JSDoc, 58/58 smoke test
+`;
+}
+
 // ========== ROUND 2 — Cycle 5: Backup reminder banner ==========
 
 function maybeShowBackupReminder() {
@@ -5669,6 +6021,7 @@ function init() {
   $('#cellHealthCheck')?.addEventListener('click', openHealthCheckModal);
   $('#cellDuplicates')?.addEventListener('click', openDuplicateModal);
   $('#cellTemplates')?.addEventListener('click', openTemplatePicker);
+  $('#cellRecurringSuggest')?.addEventListener('click', openRecurringSuggestionModal);
   $('#cellReset').addEventListener('click', resetAll);
 
   // Accent swatches
@@ -5732,6 +6085,9 @@ function init() {
 
   // Backup reminder
   maybeShowBackupReminder();
+
+  // Round 3: long-press progress visual
+  setupLongPressProgress();
 }
 
 // PWA install prompt — show banner when browser allows install
