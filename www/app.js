@@ -186,6 +186,7 @@ let ui = {
 let pieChart = null;
 let lineChart = null;
 let netWorthChart = null;
+let dowChart = null;
 let systemDarkMQ = null;
 let voiceRecognition = null;
 
@@ -2112,7 +2113,17 @@ function renderReports() {
     renderPieChart(monthTx);
     renderLineChart(ref);
     renderNetWorthChart();
+    renderDayOfWeekChart(monthTx);
   }
+
+  // Top payees (this month) — non-empty names sorted by total spend
+  renderTopPayees(monthTx);
+
+  // Income vs Expense ratio
+  renderIncomeExpenseRatio(income, expense);
+
+  // Subscription cost forecast (next 3 months)
+  renderSubForecast();
 
   const top = monthTx.filter(t => t.type === 'expense')
     .sort((a,b) => b.amount - a.amount).slice(0, 5);
@@ -2257,6 +2268,128 @@ function renderNetWorthChart() {
   $('#netWorthSummary').innerHTML = diff >= 0
     ? `<span style="color:var(--income)">↑ +${moneyShort(diff)} (${pct.toFixed(0)}%)</span> dari 6 bulan lalu`
     : `<span style="color:var(--expense)">↓ ${moneyShort(diff)} (${pct.toFixed(0)}%)</span> dari 6 bulan lalu`;
+}
+
+// Day-of-week bar chart — reveals spending patterns (e.g. weekend boros)
+function renderDayOfWeekChart(monthTx) {
+  if (typeof window.Chart !== 'function') return;
+  const dowNames = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+  const totals = [0,0,0,0,0,0,0];
+  monthTx.filter(t => t.type === 'expense').forEach(t => {
+    const d = new Date(t.date).getDay();
+    totals[d] += t.amount;
+  });
+  const max = Math.max(...totals);
+  const maxIdx = totals.indexOf(max);
+  if (dowChart) dowChart.destroy();
+  const ctx = $('#chartDayOfWeek')?.getContext('2d');
+  if (!ctx) return;
+  const txt = chartTextColor();
+  const grid = chartGridColor();
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#34c759';
+  dowChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: dowNames, datasets: [{ data: totals,
+      backgroundColor: totals.map((_, i) => i === maxIdx ? accent : accent + '55'),
+      borderRadius: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => money(ctx.raw) } } },
+      scales: {
+        x: { ticks: { color: txt, font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { color: txt, font: { size: 10 }, callback: (v) => moneyShort(v).replace(/^.+\s/, '') }, grid: { color: grid } }
+      }
+    }
+  });
+  $('#dayOfWeekSummary').textContent = max > 0
+    ? `Hari paling boros: ${dowNames[maxIdx]} (${moneyShort(max)})`
+    : 'Belum ada data';
+}
+
+// Top payees — group by name (lowercased), sum amounts, top 5
+function renderTopPayees(monthTx) {
+  const wrap = $('#topPayees');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const byName = new Map();
+  monthTx.filter(t => t.type === 'expense' && t.name).forEach(t => {
+    const key = t.name.toLowerCase().trim();
+    const cur = byName.get(key) || { name: t.name, amount: 0, count: 0 };
+    cur.amount += t.amount; cur.count++;
+    byName.set(key, cur);
+  });
+  const top = Array.from(byName.values()).sort((a,b) => b.amount - a.amount).slice(0, 5);
+  if (top.length === 0) {
+    wrap.appendChild(el('div', { class: 'muted-txt', style: 'font-size:13px;padding:8px 0' }, 'Belum ada data.'));
+    return;
+  }
+  const total = top.reduce((s,p) => s + p.amount, 0);
+  const list = el('div', { class: 'list-group-rows' });
+  top.forEach((p, i) => {
+    const pct = ((p.amount / total) * 100).toFixed(0);
+    list.appendChild(el('div', { class: 'tx-row', style: 'cursor:default' },
+      el('div', { class: 'tx-icon', style: 'background:var(--fill-3);color:var(--label);font-weight:700' }, '#' + (i + 1)),
+      el('div', { class: 'tx-main' },
+        el('div', { class: 'tx-title' }, p.name),
+        el('div', { class: 'tx-sub' }, p.count + 'x • ' + pct + '%')
+      ),
+      el('div', { class: 'tx-amount expense-txt' }, money(p.amount))
+    ));
+  });
+  wrap.appendChild(list);
+}
+
+// Income vs Expense ratio bar
+function renderIncomeExpenseRatio(income, expense) {
+  const card = $('#incomeExpenseRatioCard');
+  if (!card) return;
+  if (income === 0 && expense === 0) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const total = income + expense;
+  const inPct = total > 0 ? (income / total) * 100 : 0;
+  const outPct = total > 0 ? (expense / total) * 100 : 0;
+  $('#ratioBarIn').style.width = inPct + '%';
+  $('#ratioBarOut').style.width = outPct + '%';
+  $('#ratioLabel').innerHTML =
+    `<span class="income-txt">+${moneyShort(income)} (${inPct.toFixed(0)}%)</span>` +
+    `<span class="expense-txt">−${moneyShort(expense)} (${outPct.toFixed(0)}%)</span>`;
+  const saving = income - expense;
+  const savingRate = income > 0 ? (saving / income) * 100 : 0;
+  let verdict;
+  if (saving >= 0 && savingRate >= 20) verdict = `🎯 Saving rate ${savingRate.toFixed(0)}% — great!`;
+  else if (saving >= 0) verdict = `💪 Saving ${moneyShort(saving)} (${savingRate.toFixed(0)}% dari income)`;
+  else verdict = `⚠️ Defisit ${moneyShort(-saving)} bulan ini`;
+  $('#ratioVerdict').textContent = verdict;
+}
+
+// Forecast next 3 months of subscription spend (with growth projection)
+function renderSubForecast() {
+  const wrap = $('#subForecast');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const active = state.subscriptions.filter(s => s.active !== false && s.type !== 'income');
+  if (active.length === 0) {
+    wrap.appendChild(el('div', { class: 'muted-txt', style: 'font-size:13px;padding:8px 0;text-align:center' }, 'Belum ada langganan aktif.'));
+    return;
+  }
+  const monthlyOut = active.reduce((s, sub) => s + subMonthlyCost(sub), 0);
+  const today = new Date();
+  const months = [];
+  for (let i = 0; i < 3; i++) {
+    const m = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    months.push({ label: m.toLocaleDateString('id-ID', { month: 'long' }), amount: monthlyOut });
+  }
+  const grid = el('div', { class: 'compare-grid', style: 'grid-template-columns:1fr 1fr 1fr' });
+  months.forEach((m, i) => {
+    grid.appendChild(el('div', { class: 'compare-col' },
+      el('div', { class: 'cc-label' }, m.label),
+      el('div', { class: 'cc-val expense-txt', style: 'font-size:18px' }, moneyShort(m.amount))
+    ));
+  });
+  wrap.appendChild(grid);
+  const total = months.reduce((s, m) => s + m.amount, 0);
+  wrap.appendChild(el('div', { style: 'text-align:center;margin-top:10px;font-size:13px;color:var(--label-2)' },
+    `Total 3 bulan: ${money(total)}`));
 }
 
 function renderLineChart(refDate) {
