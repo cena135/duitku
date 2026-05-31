@@ -3232,6 +3232,16 @@ function openGoalModal(goal = null) {
       body.appendChild(formField('Sudah Terkumpul', amountInput(v => g.current = v, g.current, '')));
       body.appendChild(formField('Deadline (opsional)', el('input', { type: 'date', value: g.deadline || '',
         oninput: (e) => g.deadline = e.target.value })));
+
+      // Recurring monthly contribution (new in cycle 4)
+      body.appendChild(formField('Kontribusi Bulanan (opsional)',
+        amountInput(v => g.monthlyContribution = v, g.monthlyContribution || 0, '')));
+      if (g.monthlyContribution > 0) {
+        body.appendChild(formField('Dari Akun',
+          buildAccountPicker(() => g.contributionAccountId || state.settings.defaultAccountId,
+            id => g.contributionAccountId = id)));
+      }
+
       if (isEdit) {
         body.appendChild(el('button', { class: 'btn-danger', onclick: () => deleteGoal(g.id) }, 'Hapus Goal'));
       }
@@ -4455,6 +4465,149 @@ function fabLongPress() {
 // DATA — Export / Import / CSV / Share / Seed / Reset
 // ============================================================
 
+// ============================================================
+// CYCLE 4 — Data integrity + power-user features
+// ============================================================
+
+// Health check — scans state for orphan references, missing data, etc.
+// Returns array of issues (each { kind, severity, msg, fix? })
+function runHealthCheck() {
+  const issues = [];
+  const accIds = new Set(state.accounts.map(a => a.id));
+  const tagIds = new Set(state.tags.map(t => t.id));
+  const allCats = {
+    expense: new Set(getCategories('expense').map(c => c.id)),
+    income: new Set(getCategories('income').map(c => c.id)),
+    subscription: new Set(getCategories('subscription').map(c => c.id)),
+  };
+
+  // Orphan accountId on transactions
+  state.expenses.forEach(t => {
+    if (t.type === 'transfer') {
+      if (!accIds.has(t.fromAccountId)) issues.push({ kind:'orphan-from-acc', severity:'warn',
+        msg:`Transfer "${t.name||t.id}" pakai fromAccountId yang tidak ada` });
+      if (!accIds.has(t.toAccountId)) issues.push({ kind:'orphan-to-acc', severity:'warn',
+        msg:`Transfer "${t.name||t.id}" pakai toAccountId yang tidak ada` });
+    } else {
+      if (t.accountId && !accIds.has(t.accountId)) issues.push({ kind:'orphan-acc', severity:'warn',
+        msg:`Tx "${t.name||t.id}" pakai akun yang tidak ada (${t.accountId})` });
+      const cats = allCats[t.type];
+      if (cats && t.category && !cats.has(t.category)) issues.push({ kind:'orphan-cat', severity:'info',
+        msg:`Tx "${t.name||t.id}" pakai kategori tidak dikenal (${t.category})` });
+    }
+    // Orphan tagId
+    (t.tags || []).forEach(tid => {
+      if (!tagIds.has(tid)) issues.push({ kind:'orphan-tag', severity:'info',
+        msg:`Tx "${t.name||t.id}" pakai tag yang sudah dihapus` });
+    });
+  });
+  // Subscriptions
+  state.subscriptions.forEach(s => {
+    if (s.accountId && !accIds.has(s.accountId)) issues.push({ kind:'orphan-sub-acc', severity:'warn',
+      msg:`Langganan "${s.name}" pakai akun tidak ada` });
+  });
+  // Budgets with orphan category
+  Object.keys(state.budgets).forEach(catId => {
+    if (!allCats.expense.has(catId)) issues.push({ kind:'orphan-budget-cat', severity:'info',
+      msg:`Budget untuk kategori tidak dikenal (${catId})` });
+  });
+  // Future-dated txs (likely accidental)
+  const todayStr = isoDate();
+  state.expenses.filter(t => t.date > todayStr).forEach(t => {
+    issues.push({ kind:'future-dated', severity:'info',
+      msg:`Tx "${t.name||t.id}" bertanggal masa depan (${t.date})` });
+  });
+  // Negative amounts (should never happen, but check)
+  state.expenses.filter(t => t.amount < 0).forEach(t => {
+    issues.push({ kind:'negative-amount', severity:'error',
+      msg:`Tx "${t.name||t.id}" punya amount negatif` });
+  });
+  return issues;
+}
+
+// Show health check results in a modal
+function openHealthCheckModal() {
+  const issues = runHealthCheck();
+  showModal({
+    title: 'Cek Kesehatan Data',
+    save: null,
+    body: () => {
+      const body = el('div');
+      if (issues.length === 0) {
+        body.appendChild(illustratedEmpty('✅', 'Data sehat!',
+          'Semua referensi konsisten, tidak ada orphan, tidak ada nilai aneh.'));
+        return body;
+      }
+      const bySev = { error:[], warn:[], info:[] };
+      issues.forEach(i => bySev[i.severity || 'info'].push(i));
+      body.appendChild(el('div', { class: 'section-title', style: 'padding-top:0' },
+        `${issues.length} issue ditemukan`));
+      const group = el('div', { class: 'field-group' });
+      ['error','warn','info'].forEach(sev => {
+        bySev[sev].forEach(i => {
+          const colors = { error:'var(--expense)', warn:'var(--warning)', info:'var(--info)' };
+          group.appendChild(el('div', { class: 'cell', style: 'cursor:default' },
+            el('div', { class: 'cell-icon', style: `background:${colors[sev]}` }, sev[0].toUpperCase()),
+            el('div', { class: 'cell-main' },
+              el('div', { class: 'cell-title', style: 'font-size:14px' }, i.msg),
+              el('div', { class: 'cell-sub' }, i.kind)
+            )
+          ));
+        });
+      });
+      body.appendChild(group);
+      return body;
+    }
+  });
+}
+
+// Recurring goal contribution — auto-deduct from account into goal monthly
+// Returns { contributed: number, count: number }
+function runRecurringGoalContributions() {
+  let contributed = 0, count = 0;
+  const monthStart = isoDate(getMonthDate(0));
+  state.goals.forEach(g => {
+    if (!g.monthlyContribution || g.monthlyContribution <= 0 || !g.contributionAccountId) return;
+    if (g.current >= g.target) return; // skip completed
+    const lastAt = g.lastContributionAt || '';
+    if (lastAt >= monthStart) return; // already contributed this month
+    // Add as expense from account + bump goal
+    const acc = getAccount(g.contributionAccountId);
+    if (!acc) return;
+    state.expenses.push({
+      id: uid(), type: 'expense', date: isoDate(),
+      category: 'other', name: 'Kontribusi goal: ' + g.name,
+      amount: g.monthlyContribution, note: 'Auto goal contribution',
+      accountId: g.contributionAccountId, tags: [], createdAt: Date.now(),
+    });
+    g.current += g.monthlyContribution;
+    g.lastContributionAt = isoDate();
+    contributed += g.monthlyContribution; count++;
+  });
+  if (count > 0) save();
+  return { contributed, count };
+}
+
+// Subscription pause until date
+function pauseSubUntil(s, date) {
+  s.active = false;
+  s.pausedUntil = date;
+  save(); render();
+  toast.info(`Dijeda sampai ${shortDate(date)}`);
+}
+function maybeAutoUnpauseSubs() {
+  const today = isoDate();
+  let unpaused = 0;
+  state.subscriptions.forEach(s => {
+    if (s.pausedUntil && s.pausedUntil <= today && s.active === false) {
+      s.active = true;
+      delete s.pausedUntil;
+      unpaused++;
+    }
+  });
+  if (unpaused > 0) { save(); toast.info(`${unpaused} langganan otomatis aktif lagi`); }
+}
+
 function exportJson() {
   const data = JSON.stringify(state, null, 2);
   downloadFile(data, `duitku-backup-${isoDate()}.json`, 'application/json');
@@ -4801,6 +4954,14 @@ function init() {
   const created = runAutoRecurring();
   if (created > 0) setTimeout(() => toast(`${created} transaksi otomatis dibuat dari langganan`), TIMING.TOAST_AUTOREC);
 
+  // Auto-unpause subscriptions whose pause window expired
+  maybeAutoUnpauseSubs();
+
+  // Recurring goal contributions (monthly auto-deduct)
+  const goal = runRecurringGoalContributions();
+  if (goal.count > 0) setTimeout(() =>
+    toast.success(`${goal.count} kontribusi goal ditambah: ${moneyShort(goal.contributed)}`), 1200);
+
   // Fire notifications
   setTimeout(fireUpcomingNotifications, TIMING.NOTIF_FIRE_DELAY);
 
@@ -4899,6 +5060,7 @@ function init() {
   $('#cellImportCsv')?.addEventListener('click', () => $('#importCsvFile').click());
   $('#importCsvFile')?.addEventListener('change', (e) => { if (e.target.files[0]) importCsv(e.target.files[0]); e.target.value = ''; });
   $('#cellSeed').addEventListener('click', seedData);
+  $('#cellHealthCheck')?.addEventListener('click', openHealthCheckModal);
   $('#cellReset').addEventListener('click', resetAll);
 
   // Accent swatches
