@@ -3026,3 +3026,73 @@ kbd {
 }
 .btn-secondary:active { transform: scale(.94); }
 .btn-secondary:disabled { background: var(--fill-3); color: var(--label-3); cursor: not-allowed; }
+
+/* ============================================================
+   ROUND 4 — debt reminder / yearly / quick amounts / a11y
+   ============================================================ */
+.debt-reminder-banner {
+  margin: 12px 0; padding: 12px 14px;
+  background: color-mix(in srgb, #ff9500 12%, var(--fill-1));
+  border: 1px solid color-mix(in srgb, #ff9500 28%, transparent);
+  border-radius: 12px; display: flex; align-items: center; gap: 10px;
+  font-size: 14px;
+}
+.debt-reminder-banner .flex-1 { flex: 1; min-width: 0; }
+
+.yearly-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.yearly-year { font-size: 16px; font-weight: 700; }
+.yearly-net { font-size: 18px; font-weight: 600; }
+.yearly-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; margin-bottom: 10px; }
+.yearly-cell {
+  aspect-ratio: 1; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: var(--label-3); background: var(--fill-2);
+}
+.yearly-cell.intensity-0 { background: var(--fill-2); }
+.yearly-cell.intensity-1 { background: color-mix(in srgb, var(--expense) 18%, var(--fill-2)); color: var(--label-1); }
+.yearly-cell.intensity-2 { background: color-mix(in srgb, var(--expense) 35%, var(--fill-2)); color: var(--label-1); }
+.yearly-cell.intensity-3 { background: color-mix(in srgb, var(--expense) 55%, var(--fill-2)); color: white; }
+.yearly-cell.intensity-4 { background: color-mix(in srgb, var(--expense) 80%, var(--fill-2)); color: white; }
+.yearly-totals { display: flex; justify-content: space-between; font-size: 13px; color: var(--label-2); }
+.yearly-totals strong { font-weight: 700; }
+
+.quick-amt-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+}
+.quick-amt-chip {
+  padding: 6px 10px; background: var(--fill-2); border: none; border-radius: 12px;
+  font-size: 12px; color: var(--label-1); cursor: pointer; transition: background .12s, transform .1s;
+}
+.quick-amt-chip:hover { background: var(--fill-3); }
+.quick-amt-chip:active { transform: scale(.92); }
+.quick-amt-chip.reset { color: var(--label-3); }
+
+.budget-rec-list { display: flex; flex-direction: column; gap: 8px; }
+.budget-rec-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px;
+  background: var(--fill-1); border: 1px solid var(--separator); border-radius: 12px;
+}
+.budget-rec-icon { font-size: 22px; }
+.budget-rec-meta { flex: 1; min-width: 0; }
+.budget-rec-name { font-size: 14px; font-weight: 600; }
+.budget-rec-sub { font-size: 12px; margin-top: 2px; }
+
+/* A11y — high contrast */
+html.a11y-high-contrast {
+  --label-1: #fff;
+  --label-2: #d0d0d0;
+  --label-3: #aaa;
+  --separator: #555;
+  --fill-1: #1a1a1a;
+  --fill-2: #2c2c2c;
+  --fill-3: #3a3a3a;
+}
+html.a11y-high-contrast .cell { border-bottom: 1px solid #555 !important; }
+html.a11y-high-contrast .btn-secondary,
+html.a11y-high-contrast .cal-quick-add { box-shadow: 0 0 0 2px white inset; }
+
+/* A11y — larger text */
+html.a11y-larger-text { font-size: 17px; }
+html.a11y-larger-text .large-title { font-size: 34px !important; }
+html.a11y-larger-text .cell-title { font-size: 17px; }
+html.a11y-larger-text .stat-val { font-size: 32px !important; }
+html.a11y-larger-text input, html.a11y-larger-text button { font-size: 16px; }

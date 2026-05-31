@@ -203,6 +203,34 @@
     return true;
   });
 
+  section('ROUND 4 — goal milestones / debt reminder / yearly / quick-amt / budget rec / a11y');
+  check('getUpcomingDebts returns array', () => Array.isArray(getUpcomingDebts()));
+  check('renderDebtReminderBanner exists', () => isFn(window, 'renderDebtReminderBanner'));
+  check('computeYearlySummary returns shape', () => {
+    const y = computeYearlySummary(2026);
+    return y && Array.isArray(y.months) && y.months.length === 12 && typeof y.totalIncome === 'number';
+  });
+  check('renderYearlySummaryCard exists', () => isFn(window, 'renderYearlySummaryCard'));
+  check('buildQuickAmountChips returns element with 7 chips', () => {
+    const wrap = buildQuickAmountChips(() => 0, () => {});
+    return wrap && wrap.children.length === 7;
+  });
+  check('computeBudgetRecommendation returns null for no data', () =>
+    computeBudgetRecommendation('nonexistent-cat') === null);
+  check('openBudgetRecommendationModal exists', () => isFn(window, 'openBudgetRecommendationModal'));
+  check('checkSpendingAnomaly returns null with no data', () =>
+    checkSpendingAnomaly() === null);
+  check('maybeShowAnomalyToast exists', () => isFn(window, 'maybeShowAnomalyToast'));
+  check('applyA11ySettings exists', () => isFn(window, 'applyA11ySettings'));
+  check('applyA11ySettings sets class when highContrast true', () => {
+    state.settings.highContrast = true;
+    applyA11ySettings();
+    const ok = document.documentElement.classList.contains('a11y-high-contrast');
+    state.settings.highContrast = false; applyA11ySettings();
+    return ok;
+  });
+  check('handleNumberRowNav exists', () => isFn(window, 'handleNumberRowNav'));
+
   section('DOM smoke');
   check('renderReports does not throw', () => {
     try { renderReports(); } catch (e) {}

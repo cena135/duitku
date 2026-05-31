@@ -1185,6 +1185,8 @@ function renderDashboard() {
   // Round 3: burn rate + monthly heatmap
   renderBurnRateCard();
   renderMonthlyHeatmap();
+  // Round 4: debt due reminder
+  renderDebtReminderBanner();
 
   // Accounts mini
   const accWrap = $('#dashAccounts');
@@ -2309,6 +2311,8 @@ function renderReports() {
   renderProjectedMonthEnd();
   // Round 3 — cumulative spend overlay
   renderCumulativeSpend();
+  // Round 4 — yearly summary
+  renderYearlySummaryCard();
 
   const top = monthTx.filter(t => t.type === 'expense')
     .sort((a,b) => b.amount - a.amount).slice(0, 5);
@@ -2840,7 +2844,21 @@ function openExpenseModal(tx = null) {
       }
 
       // Amount + voice
-      const amtWrap = formField('Jumlah', amountInput(v => t.amount = v, t.amount, 'amount-input'));
+      const amtInputEl = amountInput(v => t.amount = v, t.amount, 'amount-input');
+      const amtWrap = formField('Jumlah', amtInputEl);
+      // Round 4: quick amount chips
+      const quickChips = buildQuickAmountChips(
+        () => t.amount,
+        (newVal) => {
+          t.amount = newVal;
+          const inp = amtInputEl.tagName === 'INPUT' ? amtInputEl : amtInputEl.querySelector('input');
+          if (inp) {
+            inp.value = newVal ? new Intl.NumberFormat('id-ID').format(newVal) : '';
+            inp.dispatchEvent(new Event('input'));
+          }
+        }
+      );
+      amtWrap.appendChild(quickChips);
       const voiceBtn = el('button', { class: 'voice-btn', type: 'button',
         html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg> Suara'
       });
@@ -3321,10 +3339,11 @@ function openGoalModal(goal = null) {
 function saveGoal(g, isEdit) {
   if (!g.name) { toast.warning('Nama harus diisi'); return; }
   if (g.target <= 0) { toast('Target harus diisi'); return; }
-  const wasComplete = isEdit
-    ? ((state.goals.find(x => x.id === g.id)?.current || 0) >= (state.goals.find(x => x.id === g.id)?.target || Infinity))
-    : false;
+  const prev = isEdit ? state.goals.find(x => x.id === g.id) : null;
+  const wasComplete = prev ? (prev.current || 0) >= (prev.target || Infinity) : false;
   const nowComplete = g.current >= g.target;
+  const wasPct = prev ? Math.floor(((prev.current || 0) / (prev.target || 1)) * 100) : 0;
+  const nowPct = Math.floor((g.current / g.target) * 100);
   if (isEdit) {
     const idx = state.goals.findIndex(x => x.id === g.id);
     if (idx >= 0) state.goals[idx] = g;
@@ -3338,7 +3357,14 @@ function saveGoal(g, isEdit) {
     hap('goal');
     toast('🎉 Goal tercapai! ' + g.name);
   } else {
-    toast(isEdit ? 'Tersimpan' : 'Berhasil ditambah');
+    // Round 4: milestone celebration at 25 / 50 / 75%
+    const MILESTONES = [25, 50, 75];
+    const crossed = MILESTONES.find(m => wasPct < m && nowPct >= m);
+    if (crossed) {
+      fireMilestone('🎯', `${crossed}% menuju "${g.name}"!`);
+    } else {
+      toast(isEdit ? 'Tersimpan' : 'Berhasil ditambah');
+    }
   }
 }
 function deleteGoal(id) {
@@ -5554,6 +5580,208 @@ function generateChangelogText() {
 `;
 }
 
+// ========== ROUND 4 — Cycle 1: Upcoming debt due reminder ==========
+
+function getUpcomingDebts(daysAhead = 7) {
+  const today = isoDate();
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() + daysAhead);
+  const cutoffISO = isoDate(cutoff);
+  return state.debts.filter(d => {
+    if (!d.dueDate) return false;
+    const paid = (d.payments || []).reduce((s, p) => s + p.amount, 0);
+    if (paid >= d.originalAmount) return false;
+    return d.dueDate >= today && d.dueDate <= cutoffISO;
+  });
+}
+
+function renderDebtReminderBanner() {
+  const host = $('#debtReminderBanner');
+  if (!host) return;
+  const upcoming = getUpcomingDebts(7);
+  if (!upcoming.length) { host.innerHTML = ''; host.style.display = 'none'; return; }
+  host.style.display = '';
+  host.innerHTML = '';
+  const msg = upcoming.length === 1
+    ? `Hutang "${upcoming[0].person}" jatuh tempo ${shortDate(upcoming[0].dueDate)}`
+    : `${upcoming.length} hutang jatuh tempo minggu ini`;
+  host.appendChild(el('div', { class: 'debt-reminder-banner' },
+    el('span', {}, '⏰'),
+    el('span', { class: 'flex-1' }, msg),
+    el('button', { class: 'btn-link', onclick: () => navigate('debts') }, 'Lihat')
+  ));
+}
+
+// ========== ROUND 4 — Cycle 2: Yearly summary ==========
+
+function computeYearlySummary(year) {
+  year = year || new Date().getFullYear();
+  const months = [];
+  for (let m = 0; m < 12; m++) {
+    const ref = new Date(year, m, 15);
+    const inc = state.expenses.filter(t => isInMonth(t.date, ref) && t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const exp = state.expenses.filter(t => isInMonth(t.date, ref) && t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    months.push({ name: monthYear(ref).split(' ')[0].slice(0, 3), income: inc, expense: exp, net: inc - exp });
+  }
+  const totalInc = months.reduce((s, m) => s + m.income, 0);
+  const totalExp = months.reduce((s, m) => s + m.expense, 0);
+  return { year, months, totalIncome: totalInc, totalExpense: totalExp, totalNet: totalInc - totalExp };
+}
+
+function renderYearlySummaryCard() {
+  const host = $('#yearlySummaryCard');
+  if (!host) return;
+  const sum = computeYearlySummary();
+  host.innerHTML = '';
+  host.appendChild(el('div', { class: 'yearly-head' },
+    el('span', { class: 'yearly-year' }, String(sum.year)),
+    el('span', { class: sum.totalNet >= 0 ? 'yearly-net income-txt' : 'yearly-net expense-txt' },
+      (sum.totalNet >= 0 ? '+' : '') + moneyShort(sum.totalNet))
+  ));
+  const grid = el('div', { class: 'yearly-grid' });
+  sum.months.forEach(m => {
+    const intensity = m.expense > 0 ? Math.min(4, Math.ceil((m.expense / Math.max(1, sum.totalExpense / 6)))) : 0;
+    grid.appendChild(el('div', { class: 'yearly-cell intensity-' + intensity, title: `${m.name}: ${moneyShort(m.expense)}` }, m.name));
+  });
+  host.appendChild(grid);
+  host.appendChild(el('div', { class: 'yearly-totals' },
+    el('div', {}, 'Total masuk: ', el('strong', { class: 'income-txt' }, money(sum.totalIncome))),
+    el('div', {}, 'Total keluar: ', el('strong', { class: 'expense-txt' }, money(sum.totalExpense)))
+  ));
+}
+
+// ========== ROUND 4 — Cycle 3: Quick amount chips in expense modal ==========
+
+function buildQuickAmountChips(currentValue, onPick) {
+  const wrap = el('div', { class: 'quick-amt-chips' });
+  const presets = [10000, 25000, 50000, 100000, 200000, 500000];
+  presets.forEach(amt => {
+    wrap.appendChild(el('button', {
+      type: 'button', class: 'quick-amt-chip',
+      onclick: () => {
+        hap('tap');
+        const newVal = (Number(currentValue()) || 0) + amt;
+        onPick(newVal);
+      }
+    }, '+' + moneyShort(amt)));
+  });
+  wrap.appendChild(el('button', {
+    type: 'button', class: 'quick-amt-chip reset',
+    onclick: () => { hap('tap'); onPick(0); }
+  }, 'Reset'));
+  return wrap;
+}
+
+// ========== ROUND 4 — Cycle 4: Smart budget recommendation ==========
+
+function computeBudgetRecommendation(categoryId) {
+  const months = [];
+  for (let i = 1; i <= 3; i++) {
+    const ref = getMonthDate(-i);
+    const exp = state.expenses
+      .filter(t => isInMonth(t.date, ref) && t.type === 'expense' && t.category === categoryId)
+      .reduce((s, t) => s + t.amount, 0);
+    months.push(exp);
+  }
+  const avg = months.reduce((s, x) => s + x, 0) / months.length;
+  if (avg === 0) return null;
+  // Recommend 10% buffer above average, rounded to nearest 50k
+  const recommended = Math.ceil((avg * 1.1) / 50000) * 50000;
+  return { avg, recommended, samples: months.length };
+}
+
+function openBudgetRecommendationModal() {
+  hap('navigate');
+  const cats = getCategories('expense');
+  const recommendations = cats
+    .map(c => ({ cat: c, rec: computeBudgetRecommendation(c.id) }))
+    .filter(r => r.rec)
+    .sort((a, b) => b.rec.recommended - a.rec.recommended);
+  if (!recommendations.length) {
+    toast.info('Belum cukup data untuk rekomendasi (perlu ≥1 bulan tx)');
+    return;
+  }
+  const body = el('div', { class: 'budget-rec-list' });
+  body.appendChild(el('div', { class: 'muted-txt', style: 'margin-bottom:12px' },
+    `Rekomendasi berdasarkan rata-rata 3 bulan terakhir (+10% buffer):`));
+  recommendations.forEach(({ cat, rec }) => {
+    const current = state.budgets[cat.id] || 0;
+    const row = el('div', { class: 'budget-rec-row' },
+      el('div', { class: 'budget-rec-icon' }, cat.icon),
+      el('div', { class: 'budget-rec-meta' },
+        el('div', { class: 'budget-rec-name' }, cat.name),
+        el('div', { class: 'budget-rec-sub muted-txt' },
+          'Rata-rata: ' + moneyShort(rec.avg) + (current ? ' · Sekarang: ' + moneyShort(current) : ''))
+      ),
+      el('button', {
+        class: 'btn-secondary',
+        onclick: () => {
+          state.budgets[cat.id] = rec.recommended;
+          save(); hap('save'); render();
+          toast.success(`Budget ${cat.name}: ${money(rec.recommended)}`);
+          row.querySelector('.btn-secondary').textContent = 'Diterapkan';
+          row.querySelector('.btn-secondary').disabled = true;
+        }
+      }, current === rec.recommended ? 'Sudah ' + moneyShort(current) : 'Pakai ' + moneyShort(rec.recommended))
+    );
+    body.appendChild(row);
+  });
+  showModal({ title: 'Saran Budget', body, save: null });
+}
+
+// ========== ROUND 4 — Cycle 4: Spending anomaly detection ==========
+
+function checkSpendingAnomaly() {
+  const today = isoDate();
+  const todaySpend = state.expenses.filter(t => t.date === today && t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  if (todaySpend === 0) return null;
+  // Compute avg daily spend over past 30 days (excluding today)
+  const recent = [];
+  for (let i = 1; i <= 30; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const iso = isoDate(d);
+    const v = state.expenses.filter(t => t.date === iso && t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    if (v > 0) recent.push(v);
+  }
+  if (recent.length < 7) return null;
+  const avg = recent.reduce((s, x) => s + x, 0) / recent.length;
+  if (todaySpend > avg * 2 && todaySpend > 100000) {
+    return { todaySpend, avg, multiplier: todaySpend / avg };
+  }
+  return null;
+}
+
+function maybeShowAnomalyToast() {
+  if (sessionStorage.getItem('anomalyShown')) return;
+  const r = checkSpendingAnomaly();
+  if (!r) return;
+  sessionStorage.setItem('anomalyShown', '1');
+  setTimeout(() => {
+    toast.warning(`Pengeluaran hari ini ${r.multiplier.toFixed(1)}× rata-rata harian (${moneyShort(r.avg)})`, { duration: 5000 });
+  }, 2500);
+}
+
+// ========== ROUND 4 — Cycle 5: A11y — high contrast + larger font ==========
+
+function applyA11ySettings() {
+  document.documentElement.classList.toggle('a11y-high-contrast', !!state.settings.highContrast);
+  document.documentElement.classList.toggle('a11y-larger-text', !!state.settings.largerText);
+}
+
+// ========== ROUND 4 — Cycle 5: Number row keyboard nav ==========
+
+function handleNumberRowNav(e) {
+  if (!/^[1-7]$/.test(e.key)) return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const tabs = ['dashboard', 'expense', 'subscription', 'budget', 'reports', 'accounts', 'settings'];
+  const idx = Number(e.key) - 1;
+  if (tabs[idx]) {
+    e.preventDefault();
+    hap('navigate');
+    navigate(tabs[idx]);
+  }
+}
+
 // ========== ROUND 2 — Cycle 5: Backup reminder banner ==========
 
 function maybeShowBackupReminder() {
@@ -6022,6 +6250,26 @@ function init() {
   $('#cellDuplicates')?.addEventListener('click', openDuplicateModal);
   $('#cellTemplates')?.addEventListener('click', openTemplatePicker);
   $('#cellRecurringSuggest')?.addEventListener('click', openRecurringSuggestionModal);
+  $('#cellBudgetRec')?.addEventListener('click', openBudgetRecommendationModal);
+
+  // Round 4: A11y toggles
+  const hcInput = $('#toggleHighContrast');
+  const ltInput = $('#toggleLargerText');
+  if (hcInput) {
+    hcInput.checked = !!state.settings.highContrast;
+    hcInput.addEventListener('change', () => {
+      state.settings.highContrast = hcInput.checked;
+      save(); applyA11ySettings(); hap('toggle');
+    });
+  }
+  if (ltInput) {
+    ltInput.checked = !!state.settings.largerText;
+    ltInput.addEventListener('change', () => {
+      state.settings.largerText = ltInput.checked;
+      save(); applyA11ySettings(); hap('toggle');
+    });
+  }
+  applyA11ySettings();
   $('#cellReset').addEventListener('click', resetAll);
 
   // Accent swatches
@@ -6054,6 +6302,8 @@ function init() {
       const s = $('#expenseSearch');
       if (s) { e.preventDefault(); s.focus(); }
     }
+    // Round 4: number row 1-7 → switch tabs
+    handleNumberRowNav(e);
   });
 
   // Initial nav
@@ -6088,6 +6338,9 @@ function init() {
 
   // Round 3: long-press progress visual
   setupLongPressProgress();
+
+  // Round 4: anomaly toast
+  maybeShowAnomalyToast();
 }
 
 // PWA install prompt — show banner when browser allows install
