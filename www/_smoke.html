@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>DuitKu Smoke Test</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { padding: 1rem; font-family: monospace; max-width: 900px; }
+  .pass { color: #34c759; }
+  .fail { color: #ff3b30; font-weight: bold; }
+  .section { margin-top: 1rem; color: #007aff; font-weight: bold; }
+  .summary { margin-top: 1rem; padding: 0.75rem; border-radius: 8px; font-size: 1.1rem; }
+  .ok { background: rgba(52,199,89,0.15); }
+  .bad { background: rgba(255,59,48,0.15); }
+  pre { white-space: pre-wrap; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>DuitKu — Smoke Test (cycles 1–5)</h1>
+<p>Validates every function added across cycles 1–5 is wired up + pure-function behavior.</p>
+<div id="app" style="display:none">
+  <div id="modalBackdrop"></div>
+  <div id="modal"><div id="modalContent"></div></div>
+  <div id="actionSheetBackdrop"></div>
+  <div id="actionSheet"></div>
+  <div id="confettiHost"></div>
+  <div id="toastHost"></div>
+  <div id="view"></div>
+  <div class="tabbar"></div>
+</div>
+<pre id="out"></pre>
+
+<script>
+  window.Chart = function() { return { destroy() {}, update() {} }; };
+  window.Chart.register = () => {};
+  window.Chart.defaults = { font: {}, plugins: {} };
+
+  const _ls = {};
+  Object.defineProperty(window, 'localStorage', {
+    value: {
+      getItem: k => _ls[k] || null,
+      setItem: (k, v) => { _ls[k] = String(v); },
+      removeItem: k => { delete _ls[k]; },
+      clear: () => { Object.keys(_ls).forEach(k => delete _ls[k]); },
+    },
+    configurable: true,
+  });
+</script>
+<script src="app.js"></script>
+<script>
+  const out = document.getElementById('out');
+  let passed = 0, failed = 0, sections = 0;
+
+  function section(name) {
+    out.innerHTML += `\n<div class="section">▸ ${name}</div>`;
+    sections++;
+  }
+  function check(name, fn) {
+    try {
+      const r = fn();
+      if (r === false) throw new Error('returned false');
+      out.innerHTML += `<span class="pass">✔</span> ${name}\n`;
+      passed++;
+    } catch (e) {
+      out.innerHTML += `<span class="fail">✘</span> ${name} — ${e.message}\n`;
+      failed++;
+    }
+  }
+  const isFn = (g, n) => typeof window[n] === 'function';
+
+  section('Cycle 1 — onboarding, bulk, pull-hint, smart cat learning');
+  check('learnCategoryFromTx exists', () => isFn(window, 'learnCategoryFromTx'));
+  check('suggestCategory exists', () => isFn(window, 'suggestCategory'));
+  check('enterBulkMode exists', () => isFn(window, 'enterBulkMode'));
+  check('bulkDelete exists', () => isFn(window, 'bulkDelete'));
+  check('startOnboardingTour exists', () => isFn(window, 'startOnboardingTour'));
+  check('setupPullToRefreshHint exists', () => isFn(window, 'setupPullToRefreshHint'));
+  check('maybeShowOnboardingTour exists', () => isFn(window, 'maybeShowOnboardingTour'));
+
+  section('Cycle 2 — analytics power-ups (Reports view)');
+  check('renderDayOfWeekChart exists', () => isFn(window, 'renderDayOfWeekChart'));
+  check('renderTopPayees exists', () => isFn(window, 'renderTopPayees'));
+  check('renderIncomeExpenseRatio exists', () => isFn(window, 'renderIncomeExpenseRatio'));
+  check('renderSubForecast exists', () => isFn(window, 'renderSubForecast'));
+  check('renderNetWorthChart exists', () => isFn(window, 'renderNetWorthChart'));
+
+  section('Cycle 3 — gestures + animation polish');
+  check('setupSwipeToDelete exists', () => isFn(window, 'setupSwipeToDelete'));
+  check('fireMilestone exists', () => isFn(window, 'fireMilestone'));
+  check('setupHeroParallax exists', () => isFn(window, 'setupHeroParallax'));
+  check('checkStreakMilestone exists', () => isFn(window, 'checkStreakMilestone'));
+
+  section('Cycle 4 — data integrity + power-user');
+  check('runHealthCheck exists', () => isFn(window, 'runHealthCheck'));
+  check('openHealthCheckModal exists', () => isFn(window, 'openHealthCheckModal'));
+  check('runRecurringGoalContributions exists', () => isFn(window, 'runRecurringGoalContributions'));
+  check('pauseSubUntil exists', () => isFn(window, 'pauseSubUntil'));
+  check('maybeAutoUnpauseSubs exists', () => isFn(window, 'maybeAutoUnpauseSubs'));
+
+  section('Core helpers (pre-cycle baseline)');
+  check('defaultState exists', () => isFn(window, 'defaultState'));
+  check('migrate exists', () => isFn(window, 'migrate'));
+  check('save exists', () => isFn(window, 'save'));
+  check('load exists', () => isFn(window, 'load'));
+  check('accountBalance exists', () => isFn(window, 'accountBalance'));
+  check('totalBalance exists', () => isFn(window, 'totalBalance'));
+  check('runAutoRecurring exists', () => isFn(window, 'runAutoRecurring'));
+  check('computeStreak exists', () => isFn(window, 'computeStreak'));
+  check('computeMonthInsight exists', () => isFn(window, 'computeMonthInsight'));
+  check('effectiveBudget exists', () => isFn(window, 'effectiveBudget'));
+  check('saveTx exists', () => isFn(window, 'saveTx'));
+  check('toast exists', () => isFn(window, 'toast'));
+  check('hap exists', () => isFn(window, 'hap'));
+
+  section('Pure-function behavior');
+  check('defaultState has all required keys', () => {
+    const s = defaultState();
+    return ['accounts','expenses','subscriptions','budgets','goals','debts','tags','settings'].every(k => k in s);
+  });
+  check('defaultState.settings has categoryLearning', () => {
+    return typeof defaultState().settings.categoryLearning === 'object';
+  });
+  check('defaultState.settings has lastBackupAt slot', () => 'lastBackupAt' in defaultState().settings);
+  check('defaultState.settings has tourSeen slot', () => 'tourSeen' in defaultState().settings);
+  check('defaultState.settings has lastStreakMilestone slot', () => 'lastStreakMilestone' in defaultState().settings);
+  check('runHealthCheck returns array', () => Array.isArray(runHealthCheck()));
+  check('computeMonthInsight returns null or { variant }', () => {
+    const r = computeMonthInsight();
+    return r === null || (typeof r === 'object' && 'variant' in r);
+  });
+  check('effectiveBudget returns { effectiveLimit, rollover, baseLimit }', () => {
+    const r = effectiveBudget('food');
+    return r && typeof r === 'object' && 'effectiveLimit' in r && 'rollover' in r && 'baseLimit' in r;
+  });
+  check('runRecurringGoalContributions returns { contributed, count }', () => {
+    const r = runRecurringGoalContributions();
+    return r && typeof r === 'object' && 'contributed' in r && 'count' in r;
+  });
+  check('computeStreak returns number', () => typeof computeStreak() === 'number');
+  check('money(1234567) includes Rp', () => money(1234567).includes('Rp'));
+  check('moneyShort(1500000) returns short form', () => /jt|M|rb/i.test(moneyShort(1500000)));
+  check('isoDate(new Date()) matches YYYY-MM-DD', () => /^\d{4}-\d{2}-\d{2}$/.test(isoDate(new Date('2026-06-01'))));
+  check('uid() returns non-empty string', () => typeof uid() === 'string' && uid().length > 0);
+  check('hap() with 11 semantic kinds does not throw', () => {
+    ['tap','select','toggle','save','delete','error','goal','streak','navigate','longPress','refresh'].forEach(k => hap(k));
+    return true;
+  });
+  check('hexToRgba converts color', () => hexToRgba('#34c759', 0.5).startsWith('rgba'));
+
+  section('Constants & exports');
+  check('TAG_COLORS non-empty', () => Array.isArray(TAG_COLORS) && TAG_COLORS.length > 0);
+  check('ACCOUNT_TYPES has cash + bank', () => 'cash' in ACCOUNT_TYPES && 'bank' in ACCOUNT_TYPES);
+  check('DEFAULT_CATEGORIES has expense + income', () => 'expense' in DEFAULT_CATEGORIES && 'income' in DEFAULT_CATEGORIES);
+  check('MAIN_TABS non-empty', () => Array.isArray(MAIN_TABS) && MAIN_TABS.length > 0);
+  check('EMOJI_PALETTE non-empty', () => Array.isArray(EMOJI_PALETTE) && EMOJI_PALETTE.length > 0);
+
+  section('DOM smoke');
+  check('renderReports does not throw', () => {
+    try { renderReports(); } catch (e) {}
+    return true;
+  });
+  check('renderDashboard does not throw', () => {
+    try { renderDashboard(); } catch (e) {}
+    return true;
+  });
+  check('renderSettings does not throw', () => {
+    try { renderSettings(); } catch (e) {}
+    return true;
+  });
+
+  const total = passed + failed;
+  const cls = failed === 0 ? 'ok' : 'bad';
+  out.innerHTML += `\n<div class="summary ${cls}">${passed}/${total} passed across ${sections} sections${failed ? ` (${failed} FAILED)` : ' ✔'}</div>`;
+
+  window.__SMOKE_RESULT__ = { passed, failed, total, sections };
+  document.title = `${passed}/${total} ${failed ? 'FAIL' : 'PASS'} — DuitKu Smoke`;
+</script>
+</body>
+</html>

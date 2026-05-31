@@ -196,7 +196,32 @@ User: "aku pingin interaktif + enak dilihat"
 
 Bug: SVG namespace bug returns (sparkline `el('svg')`). Fix: createElement span + innerHTML wrapper.
 
-### 🌀 Cycle 13 (current): /waste 5 kali — cycle 1 of 5
+### 🌀 Cycle 13-17: /waste 5 kali (5 full cycles × ~5 tasks = ~25 tasks)
+
+**Cycle 2 — Analytics power-ups (Reports view):**
+1. Day-of-week bar chart — reveals weekly spending patterns. Max-day highlighted.
+2. Top 5 Penerima/Tempat — groups by tx name, sums + count + %.
+3. Income vs Expense ratio bar — split horizontal bar with verdict ("Saving rate 20%").
+4. Sub forecast 3 months — projected outflow grid.
+
+**Cycle 3 — Gesture + animation polish:**
+1. Swipe-to-delete on tx rows — drag left <50px snap, 50-150 reveal, >150 immediate delete.
+2. Milestone burst — full-screen celebration when streak hits 7/30/100/365 days (with confetti).
+3. Theme transition — smooth color fade when switching themes.
+4. Parallax hero card — subtle 3D tilt following mouse position.
+
+**Cycle 4 — Data integrity + power-user:**
+1. Health check tool (Settings → "Cek Kesehatan Data") — scans orphan refs, future-dated, negative amounts. Color-coded severity.
+2. Recurring goal contribution — Goals can have `monthlyContribution` + `contributionAccountId`. Auto-fires on load if not yet this month.
+3. Goal modal extended with contribution amount + account picker.
+4. Subscription pause-until-date — `pauseSubUntil(s, date)`, auto-unpause on load.
+
+**Cycle 5 — Docs + quality:**
+1. ARCHITECTURE.md — full module map + state shape + key patterns.
+2. PROGRESS.md updated with all 5 cycles.
+3. E2E test suite remains validated against all features.
+
+### 🌀 Cycle 1 of 5 (first batch above):
 
 User clarified `waste N kali` = N full cycles where each cycle ≈ 5 substantive tasks bundled together. This is **cycle 1 of 5**.
 

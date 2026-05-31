@@ -213,6 +213,10 @@ function defaultState() {
       customCategories: {},
       defaultAccountId: 'acc_cash',
       budgetRollover: false,  // when true, unused prev-month budget carries forward
+      categoryLearning: { expense: {}, income: {} },  // name→categoryId map populated by learnCategoryFromTx
+      lastBackupAt: 0,        // ms timestamp, used by daysSinceLastBackup
+      lastStreakMilestone: 0, // last celebrated streak day count (7/30/100/365)
+      tourSeen: false,        // gates startOnboardingTour
     },
   };
 }
@@ -251,6 +255,12 @@ function _buildBalanceCache() {
   });
 }
 
+/**
+ * Backfills missing fields on loaded state so older data shapes
+ * stay compatible. Runs once on every load() before any render.
+ * Add new defaults here when extending the schema — never assume
+ * a field exists in any render code.
+ */
 function migrate() {
   if (!state) return;
   const d = defaultState();
@@ -316,6 +326,12 @@ function getAccount(id) {
   return state.accounts.find(a => a.id === id) || null;
 }
 function accountTypeInfo(t) { return ACCOUNT_TYPES[t] || ACCOUNT_TYPES.cash; }
+/**
+ * Computes the current balance for an account by walking all expenses,
+ * incomes, transfers, and debt payments. Memoized via _balanceCache,
+ * which is invalidated by save(). Treat as O(1) within one render
+ * pass, O(N+M) across a full save->render cycle.
+ */
 function accountBalance(account) {
   if (!account) return 0;
   if (_balanceCache === null) _buildBalanceCache();
@@ -354,6 +370,12 @@ function getRecentSuggestions(type, limit = 5) {
 // Suggest category from past tx with similar name. Uses two sources:
 // 1) Explicit user-taught mappings in state.settings.categoryLearning (most authoritative)
 // 2) Inference from most-recent past tx with name containing the query
+/**
+ * Returns the best-guess category id for a transaction name + type, or null.
+ * Tries exact-name learned mapping first, then partial-match against recent
+ * transactions. Used in expense modal to auto-pick a category as user types.
+ * Re-runs on every keystroke; cheap (state.expenses scan, no allocation).
+ */
 function suggestCategory(name, type) {
   if (!name || name.length < 2) return null;
   const needle = name.toLowerCase().trim();
@@ -1010,6 +1032,12 @@ function setupModalDrag() {
 // AUTO-EXECUTE RECURRING + NOTIFICATIONS
 // ============================================================
 
+/**
+ * Backfills missed subscription occurrences as actual transactions whenever
+ * autoExecRecurring is on and `nextRenewal` is in the past. Runs once on
+ * load (init) and after restoring a backup. Returns count created so
+ * caller can toast the user.
+ */
 function runAutoRecurring() {
   if (!state.settings.autoExecRecurring) return 0;
   let created = 0;
@@ -2908,6 +2936,12 @@ function rebuildModalBody() {
     $('#modalBody').appendChild(cur.bodyFn());
   }
 }
+/**
+ * Persists a single transaction (income/expense). When isEdit is true,
+ * splices in place by id; otherwise unshifts to expenses[]. Also calls
+ * learnCategoryFromTx to grow the smart-suggest mapping. Always calls
+ * save() at the end, which invalidates _balanceCache.
+ */
 function saveTx(t, isEdit) {
   if (!t.amount || t.amount <= 0) { toast.warning('Jumlah harus diisi'); return; }
   if (isEdit) {
