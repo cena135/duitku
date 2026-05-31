@@ -2148,6 +2148,11 @@ function renderBudgetRow(b) {
     ? moneyShort(eff.baseLimit) + ' + ' + moneyShort(eff.rollover) + ' carry'
     : moneyShort(limit);
 
+  // Round 5: pace target line — where you should be by today
+  const burn = computeBudgetBurnLine(b.cat);
+  const targetPct = burn ? Math.min(100, (burn.targetSoFar / limit) * 100) : 0;
+  const ahead = burn && burn.pace < 0;
+
   return el('div', { class: 'budget-card', onclick: () => openBudgetModal(b.cat) },
     el('div', { class: 'bc-head' },
       el('div', { class: 'bc-name' }, el('span', {}, cat.icon), el('span', {}, cat.name)),
@@ -2156,11 +2161,16 @@ function renderBudgetRow(b) {
         ' / ' + limitText
       )
     ),
-    el('div', { class: progCls }, el('span', { style: `width:${pct}%` })),
+    el('div', { class: progCls },
+      el('span', { style: `width:${pct}%` }),
+      burn ? el('span', { class: 'progress-target', style: `left:${targetPct}%`, title: `Target hari ke-${burn.dayOfMonth}: ${moneyShort(burn.targetSoFar)}` }) : null
+    ),
     el('div', { class: 'bc-foot' },
       el('span', {}, `${pct.toFixed(0)}% terpakai`),
-      el('span', { class: over ? 'expense-txt' : 'muted-txt' },
-        over ? 'Over ' + moneyShort(b.used - limit) : 'Sisa ' + moneyShort(limit - b.used)
+      el('span', { class: over ? 'expense-txt' : ahead ? 'income-txt' : 'muted-txt' },
+        over ? 'Over ' + moneyShort(b.used - limit)
+             : ahead ? 'Hemat ' + moneyShort(-burn.pace)
+             : 'Sisa ' + moneyShort(limit - b.used)
       )
     )
   );
@@ -4547,13 +4557,18 @@ function fabAction() {
 
 function fabLongPress() {
   hap('save');
-  openActionSheet('Tambah Cepat', [
-    { label: 'Transaksi',         icon: '💸', onClick: () => openExpenseModal() },
+  const items = [
+    { label: 'Transaksi',           icon: '💸', onClick: () => openExpenseModal() },
+    { label: 'Pemasukan',           icon: '💰', onClick: () => openExpenseModal({ type: 'income' }) },
     { label: 'Transfer antar Akun', icon: '↔️', onClick: () => openTransferModal() },
-    { label: 'Hutang / Piutang',  icon: '🤝', onClick: () => openDebtModal() },
-    { label: 'Split Bill',        icon: '🧮', onClick: () => openSplitBillModal() },
-    { label: 'Langganan Baru',    icon: '🔁', onClick: () => openSubModal() },
-  ]);
+    { label: 'Hutang / Piutang',    icon: '🤝', onClick: () => openDebtModal() },
+    { label: 'Split Bill',          icon: '🧮', onClick: () => openSplitBillModal() },
+    { label: 'Langganan Baru',      icon: '🔁', onClick: () => openSubModal() },
+  ];
+  if ((state.settings.txTemplates || []).length > 0) {
+    items.unshift({ label: 'Dari Template', icon: '⭐', onClick: () => openTemplatePicker() });
+  }
+  openActionSheet('Tambah Cepat', items);
 }
 
 // ============================================================
@@ -5782,6 +5797,189 @@ function handleNumberRowNav(e) {
   }
 }
 
+// ========== ROUND 5 — Cycle 1: Settings search ==========
+
+function setupSettingsSearch() {
+  const input = $('#settingsSearch');
+  const view = document.querySelector('[data-view="settings"]');
+  if (!input || !view) return;
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    view.querySelectorAll('.group').forEach(group => {
+      let groupHasMatch = false;
+      group.querySelectorAll('.cell').forEach(cell => {
+        const text = (cell.textContent || '').toLowerCase();
+        const match = !q || text.includes(q);
+        cell.style.display = match ? '' : 'none';
+        if (match) groupHasMatch = true;
+      });
+      group.style.display = (q && !groupHasMatch) ? 'none' : '';
+    });
+  });
+}
+
+// ========== ROUND 5 — Cycle 1: Category drilldown ==========
+
+function openCategoryDrilldown(categoryId, type) {
+  const cat = getCategory(type, categoryId);
+  hap('navigate');
+  const ref = getMonthDate(ui.monthOffset || 0);
+  const txs = state.expenses
+    .filter(t => t.type === type && t.category === categoryId && isInMonth(t.date, ref))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const total = txs.reduce((s, t) => s + t.amount, 0);
+  const body = el('div', { class: 'drill-body' });
+  body.appendChild(el('div', { class: 'drill-summary' },
+    el('div', { class: 'drill-total' }, money(total)),
+    el('div', { class: 'drill-sub muted-txt' }, `${txs.length} transaksi · ${monthYear(ref)}`)
+  ));
+  if (txs.length === 0) {
+    body.appendChild(el('div', { class: 'list-empty' }, 'Tidak ada transaksi'));
+  } else {
+    const list = el('div', { class: 'drill-list' });
+    txs.forEach(t => list.appendChild(renderTxRow(t)));
+    body.appendChild(list);
+  }
+  showModal({ title: cat.icon + ' ' + cat.name, body, save: null });
+}
+
+// ========== ROUND 5 — Cycle 1: FAB radial menu ==========
+
+function openQuickAddMenu() {
+  hap('navigate');
+  openActionSheet('Tambah Cepat', [
+    { label: 'Pengeluaran', icon: '💸', onClick: () => openExpenseModal({ type: 'expense' }) },
+    { label: 'Pemasukan', icon: '💰', onClick: () => openExpenseModal({ type: 'income' }) },
+    { label: 'Transfer', icon: '↔️', onClick: () => openTransferModal() },
+    { label: 'Dari template', icon: '⭐', onClick: () => openTemplatePicker() },
+  ]);
+}
+
+// ========== ROUND 5 — Cycle 2: Per-day budget burn ==========
+
+function computeBudgetBurnLine(categoryId) {
+  const budget = state.budgets[categoryId] || 0;
+  if (!budget) return null;
+  const ref = getMonthDate(0);
+  const totalDays = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
+  const today = new Date();
+  const dayOfMonth = isInMonth(isoDate(today), ref) ? today.getDate() : totalDays;
+  const dailyTarget = budget / totalDays;
+  const targetSoFar = dailyTarget * dayOfMonth;
+  const actualSoFar = state.expenses
+    .filter(t => isInMonth(t.date, ref) && t.type === 'expense' && t.category === categoryId)
+    .reduce((s, t) => s + t.amount, 0);
+  const pace = actualSoFar - targetSoFar;
+  return { budget, dailyTarget, targetSoFar, actualSoFar, pace, dayOfMonth, totalDays };
+}
+
+// ========== ROUND 5 — Cycle 4: Low balance warning ==========
+
+function checkLowBalances() {
+  const warnings = [];
+  state.accounts.forEach(a => {
+    if (a.archived) return;
+    const bal = accountBalance(a);
+    // Warn at <100k for accounts holding >0 originally and excluding credit cards
+    if (a.type !== 'credit' && bal < 100000 && bal > 0) {
+      warnings.push({ account: a, balance: bal });
+    }
+  });
+  return warnings;
+}
+
+function maybeShowLowBalanceToast() {
+  if (sessionStorage.getItem('lowBalanceShown')) return;
+  const w = checkLowBalances();
+  if (!w.length) return;
+  sessionStorage.setItem('lowBalanceShown', '1');
+  setTimeout(() => {
+    if (w.length === 1) toast.warning(`Saldo ${w[0].account.name} tinggal ${moneyShort(w[0].balance)}`);
+    else toast.warning(`${w.length} akun saldonya tinggal sedikit`);
+  }, 3000);
+}
+
+// ========== ROUND 5 — Cycle 4: Day-of-week spend prediction insight ==========
+
+function getDayOfWeekSpendPattern(dow) {
+  // dow = 0..6 (Sun..Sat)
+  const samples = state.expenses
+    .filter(t => t.type === 'expense' && new Date(t.date).getDay() === dow);
+  if (samples.length < 4) return null;
+  // Group by date, then average per active day
+  const byDate = {};
+  samples.forEach(t => { byDate[t.date] = (byDate[t.date] || 0) + t.amount; });
+  const totals = Object.values(byDate);
+  const avg = totals.reduce((s, x) => s + x, 0) / totals.length;
+  return { dow, avg, sampleCount: totals.length };
+}
+
+function getTodayDoWInsight() {
+  const today = new Date();
+  const pat = getDayOfWeekSpendPattern(today.getDay());
+  if (!pat) return null;
+  const names = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  return {
+    text: `Biasanya hari ${names[pat.dow]} kamu habis sekitar ${moneyShort(pat.avg)}`,
+    avg: pat.avg,
+    dow: pat.dow,
+  };
+}
+
+// ========== ROUND 5 — Cycle 4: Yearly summary share text ==========
+
+function buildYearlySummaryText(year) {
+  const s = computeYearlySummary(year);
+  const lines = [`📊 DuitKu — Ringkasan ${s.year}`, ''];
+  lines.push(`Total masuk : ${money(s.totalIncome)}`);
+  lines.push(`Total keluar: ${money(s.totalExpense)}`);
+  lines.push(`Net         : ${(s.totalNet >= 0 ? '+' : '') + money(s.totalNet)}`);
+  if (s.totalIncome > 0) {
+    const rate = ((s.totalIncome - s.totalExpense) / s.totalIncome) * 100;
+    lines.push(`Rasio tab.  : ${rate.toFixed(1)}%`);
+  }
+  lines.push('');
+  lines.push('Per bulan:');
+  s.months.forEach(m => {
+    if (m.income + m.expense > 0) {
+      lines.push(`  ${m.name.padEnd(4)} : ${(m.net >= 0 ? '+' : '') + moneyShort(m.net)}`);
+    }
+  });
+  return lines.join('\n');
+}
+
+async function shareYearlySummary() {
+  const text = buildYearlySummaryText();
+  if (navigator.share) {
+    try { await navigator.share({ text, title: 'DuitKu Ringkasan Tahunan' }); return; } catch (e) { /* fallthrough */ }
+  }
+  // Fallback: copy to clipboard
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success('Ringkasan disalin ke clipboard');
+  } catch (e) {
+    toast.error('Gagal menyalin: ' + e.message);
+  }
+}
+
+// ========== ROUND 5 — Cycle 3: Skeleton loader ==========
+
+function setupChartSkeletons() {
+  // Add skeleton class to chart cards before Chart.js loads; remove when chart renders
+  document.querySelectorAll('.chart-card .chart-wrap').forEach(w => {
+    if (!w.classList.contains('skeleton-loaded')) {
+      w.classList.add('skeleton-loading');
+    }
+  });
+}
+
+function clearChartSkeletons() {
+  document.querySelectorAll('.skeleton-loading').forEach(s => {
+    s.classList.remove('skeleton-loading');
+    s.classList.add('skeleton-loaded');
+  });
+}
+
 // ========== ROUND 2 — Cycle 5: Backup reminder banner ==========
 
 function maybeShowBackupReminder() {
@@ -6341,6 +6539,11 @@ function init() {
 
   // Round 4: anomaly toast
   maybeShowAnomalyToast();
+
+  // Round 5: settings search, share yearly, low balance warn
+  setupSettingsSearch();
+  $('#shareYearlyBtn')?.addEventListener('click', shareYearlySummary);
+  maybeShowLowBalanceToast();
 }
 
 // PWA install prompt — show banner when browser allows install

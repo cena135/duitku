@@ -231,6 +231,30 @@
   });
   check('handleNumberRowNav exists', () => isFn(window, 'handleNumberRowNav'));
 
+  section('ROUND 5 — settings search / drill / FAB menu / pace / share / skeleton');
+  check('setupSettingsSearch exists', () => isFn(window, 'setupSettingsSearch'));
+  check('openCategoryDrilldown exists', () => isFn(window, 'openCategoryDrilldown'));
+  check('openQuickAddMenu exists', () => isFn(window, 'openQuickAddMenu'));
+  check('computeBudgetBurnLine returns null with no budget', () =>
+    computeBudgetBurnLine('xyz-fake-cat') === null);
+  check('checkLowBalances returns array', () => Array.isArray(checkLowBalances()));
+  check('maybeShowLowBalanceToast exists', () => isFn(window, 'maybeShowLowBalanceToast'));
+  check('getDayOfWeekSpendPattern accepts 0-6', () => {
+    const r = getDayOfWeekSpendPattern(1);
+    return r === null || (typeof r === 'object' && 'avg' in r);
+  });
+  check('getTodayDoWInsight returns null or { text, avg, dow }', () => {
+    const r = getTodayDoWInsight();
+    return r === null || (r.text && typeof r.avg === 'number');
+  });
+  check('buildYearlySummaryText returns multi-line string', () => {
+    const t = buildYearlySummaryText(2026);
+    return typeof t === 'string' && t.includes('Total masuk');
+  });
+  check('shareYearlySummary exists', () => isFn(window, 'shareYearlySummary'));
+  check('setupChartSkeletons exists', () => isFn(window, 'setupChartSkeletons'));
+  check('clearChartSkeletons exists', () => isFn(window, 'clearChartSkeletons'));
+
   section('DOM smoke');
   check('renderReports does not throw', () => {
     try { renderReports(); } catch (e) {}

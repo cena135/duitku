@@ -3096,3 +3096,47 @@ html.a11y-larger-text .large-title { font-size: 34px !important; }
 html.a11y-larger-text .cell-title { font-size: 17px; }
 html.a11y-larger-text .stat-val { font-size: 32px !important; }
 html.a11y-larger-text input, html.a11y-larger-text button { font-size: 16px; }
+
+/* ============================================================
+   ROUND 5 — settings search / budget pace line / skeleton loader
+   ============================================================ */
+.settings-search-wrap {
+  margin: 8px 0 14px;
+}
+.settings-search-wrap input {
+  width: 100%; padding: 10px 14px; border-radius: 10px;
+  border: 1px solid var(--separator); background: var(--fill-1);
+  color: var(--label-1); font-size: 15px; box-sizing: border-box;
+}
+.settings-search-wrap input:focus {
+  border-color: var(--accent); outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.progress { position: relative; }
+.progress-target {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: var(--label-2); border-radius: 1px;
+  box-shadow: 0 0 0 1px var(--card-bg, var(--fill-1));
+}
+
+.drill-body { display: flex; flex-direction: column; gap: 12px; }
+.drill-summary { padding: 16px; background: var(--fill-2); border-radius: 12px; text-align: center; }
+.drill-total { font-size: 28px; font-weight: 700; }
+.drill-sub { font-size: 13px; margin-top: 4px; }
+.drill-list { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.skeleton-loading {
+  position: relative; overflow: hidden;
+  background: var(--fill-2);
+}
+.skeleton-loading::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--label-1) 8%, transparent), transparent);
+  animation: shimmer 1.4s infinite;
+}
+.skeleton-loaded { background: transparent; }

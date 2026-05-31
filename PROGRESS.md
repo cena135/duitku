@@ -2,7 +2,19 @@
 
 Dokumentasi journey dari ide → app keuangan personal yang fully featured, polished, dan tested.
 
-**Status saat ini:** v2.0.0 — 7.167 baris kode, 34/34 E2E tests passing, ready to install as APK Android atau deploy ke web.
+**Status saat ini:** v2.5.0 — 10.700+ baris kode, **116/116 smoke tests passing**, 5 waste-rounds shipped, live deployed di GitHub Pages, APK siap install di Android.
+
+## /waste marathon (5 rounds × 5 cycles = ~100 new features beyond baseline)
+
+| Round | Theme summary | Smoke after | Commit |
+|---|---|---|---|
+| 1 | onboarding + bulk + pull-hint + smart-cat / 4 new charts / swipe+milestone+parallax / health+goal+sub-pause / docs+JSDoc | 58/58 | d32ce08 |
+| 2 | adv-filter modal + Ctrl+K palette / 6-mo savings + top-exp + projection / bulk recat/move/tag/date / templates / dup-detect + backup reminder | 75/75 | a1c5a34 |
+| 3 | calendar quick-add / merchant pattern auto-cat / burn rate + heatmap + cumulative overlay / recurring detection / long-press progress + drag-reorder + CHANGELOG | 92/92 | 724ca00 |
+| 4 | goal milestones 25/50/75% / debt due reminder / yearly summary card / quick-amount chips / smart budget rec / anomaly toast / a11y high-contrast+larger-text / numrow nav | 104/104 | b05528d |
+| 5 | settings search / category drilldown / FAB template menu / per-day pace line / yearly share / low-balance warn / day-of-week prediction / skeleton loader | 116/116 | (this commit) |
+
+See [CHANGELOG.md](./CHANGELOG.md) for the flat per-round feature list.
 
 ---
 

@@ -1,5 +1,18 @@
 # DuitKu — Changelog
 
+## Round 5 (2026-06-01)
+- Settings search bar (live filter cells by query)
+- Category drilldown modal (helper `openCategoryDrilldown(catId, type)`)
+- FAB long-press menu now includes "Dari Template" (when templates exist)
+- Per-day budget pace line — vertical marker on progress bar shows where
+  you should be by today; "Hemat" badge when ahead of pace
+- Yearly summary share button (Web Share API → clipboard fallback,
+  formatted as monospace-friendly text)
+- Low balance auto-warn (toast on load if any non-credit account < 100k)
+- Day-of-week spend prediction (`getTodayDoWInsight`)
+- Skeleton loader CSS for chart cards
+- CHANGELOG.md kept current
+
 ## Round 4 (2026-06-01)
 - Goal milestone celebration (25/50/75% → fireMilestone burst)
 - Upcoming debt due-date reminder banner (jatuh tempo 7 hari ke depan)

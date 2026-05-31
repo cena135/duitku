@@ -400,7 +400,10 @@
         </div>
 
         <div class="chart-card">
-          <div class="chart-title">Ringkasan Tahun Ini</div>
+          <div class="chart-title">
+            <span>Ringkasan Tahun Ini</span>
+            <button id="shareYearlyBtn" class="btn-link" type="button" style="float:right;font-size:13px">Bagikan</button>
+          </div>
           <div id="yearlySummaryCard"></div>
         </div>
 
@@ -418,6 +421,9 @@
       <!-- SETTINGS -->
       <section class="view hidden" data-view="settings">
         <h1 class="large-title">Pengaturan</h1>
+        <div class="settings-search-wrap">
+          <input type="search" id="settingsSearch" placeholder="Cari pengaturan..." />
+        </div>
         <div class="large-title-sub">Sesuaikan tampilan & format</div>
 
         <div class="group">
