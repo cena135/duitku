@@ -2109,6 +2109,154 @@ button:focus-visible, .cell:focus-visible, .tx-row:focus-visible,
 }
 
 /* ============================================================
+   BULK SELECT MODE — multi-tx selection + floating action bar
+   ============================================================ */
+body.bulk-mode .tx-row {
+  padding-left: 50px;
+  position: relative;
+}
+body.bulk-mode .tx-row::before {
+  content: '';
+  position: absolute;
+  left: 14px; top: 50%;
+  transform: translateY(-50%);
+  width: 22px; height: 22px;
+  border: 2px solid var(--label-3);
+  border-radius: 50%;
+  background: var(--card);
+  transition: all .15s;
+}
+body.bulk-mode .tx-row.selected::before {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--card);
+}
+body.bulk-mode .tx-row.selected {
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+}
+
+.bulk-action-bar {
+  position: fixed;
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translate(-50%, 100px);
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 10px 18px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--accent) 40%, transparent);
+  z-index: 30;
+  transition: transform .25s cubic-bezier(.32,.72,0,1);
+  font-size: 14px;
+  font-weight: 600;
+}
+.bulk-action-bar.visible { transform: translate(-50%, 0); }
+.bulk-action-bar button {
+  background: rgba(0,0,0,.18);
+  color: var(--accent-ink);
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.bulk-action-bar button.bulk-cancel {
+  background: rgba(255,255,255,.2);
+}
+
+/* ============================================================
+   ONBOARDING TOUR (overlay tooltips)
+   ============================================================ */
+.tour-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.65);
+  z-index: 200;
+  animation: fadein .25s;
+  cursor: pointer;
+}
+.tour-spotlight {
+  position: absolute;
+  border-radius: 12px;
+  pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.65), 0 0 0 4px var(--accent);
+  transition: all .35s cubic-bezier(.32,.72,0,1);
+}
+.tour-tooltip {
+  position: absolute;
+  background: var(--card);
+  color: var(--label);
+  border-radius: 12px;
+  padding: 14px 16px;
+  max-width: 280px;
+  box-shadow: var(--shadow-lg);
+  z-index: 201;
+  font-size: 14px;
+  letter-spacing: -.16px;
+  animation: tour-pop .35s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes tour-pop {
+  from { opacity: 0; transform: scale(.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+.tour-tooltip strong { display: block; font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.tour-tooltip .tour-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  gap: 8px;
+}
+.tour-tooltip .tour-step {
+  font-size: 11px;
+  color: var(--label-2);
+  letter-spacing: .02em;
+}
+.tour-tooltip button {
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.tour-tooltip button.tour-skip {
+  background: transparent;
+  color: var(--label-2);
+}
+
+/* ============================================================
+   PULL-TO-REFRESH HINT (CSS-only, animated arrow at top)
+   ============================================================ */
+.pull-hint {
+  position: relative;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.pull-hint::before {
+  content: '↓ Tarik ke bawah untuk refresh';
+  position: absolute;
+  top: -36px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--label-3);
+  letter-spacing: -.06px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity .3s, top .3s;
+}
+body.scrolled-top .pull-hint::before {
+  opacity: 1; top: -28px;
+}
+
+/* ============================================================
    SUBSCRIPTION RENEWAL MINI-CALENDAR (30-day strip)
    ============================================================ */
 .sub-calendar {

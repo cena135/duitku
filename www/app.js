@@ -1648,9 +1648,66 @@ function openTxContextMenu(tx) {
       onClick: () => tx.type === 'transfer' ? openTransferModal(tx) : openExpenseModal(tx) },
     { label: 'Duplikat ke hari ini', icon: '📋',
       onClick: () => duplicateTx(tx) },
+    { label: 'Pilih beberapa…', icon: '☑️',
+      onClick: () => enterBulkMode(tx.id) },
     { label: 'Hapus', icon: '🗑️', destructive: true,
       onClick: () => deleteTx(tx.id) },
   ]);
+}
+
+// Bulk select mode — multi-select tx rows for batch operations
+const bulkSelected = new Set();
+function enterBulkMode(initialId) {
+  document.body.classList.add('bulk-mode');
+  bulkSelected.clear();
+  if (initialId) bulkSelected.add(initialId);
+  renderBulkSelection();
+  // Intercept tx-row clicks: toggle selection instead of opening modal
+  document.addEventListener('click', bulkRowToggle, { capture: true });
+  hap('toggle');
+}
+function exitBulkMode() {
+  document.body.classList.remove('bulk-mode');
+  bulkSelected.clear();
+  $('#bulkActionBar')?.classList.remove('visible');
+  document.removeEventListener('click', bulkRowToggle, { capture: true });
+  render();
+}
+function bulkRowToggle(e) {
+  const row = e.target.closest('.tx-row');
+  if (!row || !document.body.classList.contains('bulk-mode')) return;
+  e.preventDefault(); e.stopPropagation();
+  const id = row.dataset.txId;
+  if (!id) return;
+  if (bulkSelected.has(id)) bulkSelected.delete(id);
+  else bulkSelected.add(id);
+  renderBulkSelection();
+  hap('select');
+}
+function renderBulkSelection() {
+  document.querySelectorAll('.tx-row').forEach(r => {
+    r.classList.toggle('selected', bulkSelected.has(r.dataset.txId));
+  });
+  const bar = $('#bulkActionBar');
+  const cnt = $('#bulkCount');
+  if (bulkSelected.size > 0) {
+    cnt.textContent = bulkSelected.size + ' dipilih';
+    bar.classList.add('visible');
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+function bulkDelete() {
+  if (bulkSelected.size === 0) return;
+  if (!confirm(`Hapus ${bulkSelected.size} transaksi?`)) return;
+  const deleted = state.expenses.filter(t => bulkSelected.has(t.id));
+  state.expenses = state.expenses.filter(t => !bulkSelected.has(t.id));
+  const count = deleted.length;
+  save(); hap('delete');
+  exitBulkMode();
+  toast(`${count} transaksi dihapus`, {
+    action: { label: 'Urungkan', onClick: () => { deleted.forEach(t => state.expenses.push(t)); save(); render(); } }
+  });
 }
 
 function duplicateTx(tx) {
@@ -3725,6 +3782,72 @@ function setupFocusTrap() {
   });
 }
 
+// Onboarding tour — overlay tooltips pointing to key UI elements.
+// Triggered: first time user lands with data (after seed or first tx).
+const TOUR_STEPS = [
+  { target: '#fabAdd', title: 'Tombol +', body: 'Tap untuk tambah transaksi. Tahan untuk menu cepat: transfer, hutang, split bill.', placement: 'top-left' },
+  { target: '[data-nav="reports"]', title: 'Laporan', body: 'Lihat trend, top kategori, net worth, dan perbandingan bulan/tahun.', placement: 'top' },
+  { target: '#settingsBtn', title: 'Pengaturan', body: 'Ganti tema, warna aksen, mata uang, kategori, dll. Export backup juga di sini.', placement: 'bottom-right' },
+  { target: '#statsWidget', title: 'Insight Harian', body: 'Heatmap minggu, top kategori, trend. Update real-time saat kamu catat.', placement: 'bottom' },
+];
+function maybeShowOnboardingTour() {
+  if (state.settings.tourSeen) return;
+  if (isStateEmpty()) return; // wait until they have data
+  // Defer one tick so layout settles
+  setTimeout(() => startOnboardingTour(), 600);
+}
+function startOnboardingTour() {
+  let step = 0;
+  const backdrop = el('div', { class: 'tour-backdrop' });
+  const spotlight = el('div', { class: 'tour-spotlight' });
+  const tooltip = el('div', { class: 'tour-tooltip' });
+  document.body.appendChild(backdrop);
+  document.body.appendChild(spotlight);
+  document.body.appendChild(tooltip);
+  const finish = () => {
+    state.settings.tourSeen = true; save();
+    [backdrop, spotlight, tooltip].forEach(e => e.remove());
+  };
+  backdrop.onclick = finish;
+  const showStep = () => {
+    const s = TOUR_STEPS[step];
+    const target = document.querySelector(s.target);
+    if (!target) { step++; if (step >= TOUR_STEPS.length) return finish(); return showStep(); }
+    const r = target.getBoundingClientRect();
+    spotlight.style.cssText = `left:${r.left - 8}px;top:${r.top - 8}px;width:${r.width + 16}px;height:${r.height + 16}px;`;
+    tooltip.innerHTML = '';
+    tooltip.appendChild(el('span', { class: 'tour-step' }, `Langkah ${step+1} dari ${TOUR_STEPS.length}`));
+    tooltip.appendChild(el('strong', {}, s.title));
+    tooltip.appendChild(el('div', {}, s.body));
+    const actions = el('div', { class: 'tour-actions' });
+    actions.appendChild(el('button', { class: 'tour-skip', onclick: finish }, 'Lewati'));
+    actions.appendChild(el('button', { onclick: () => { step++; if (step >= TOUR_STEPS.length) finish(); else showStep(); } },
+      step === TOUR_STEPS.length - 1 ? 'Selesai' : 'Lanjut'));
+    tooltip.appendChild(actions);
+    // Position tooltip near target
+    const placement = s.placement;
+    const ttRect = tooltip.getBoundingClientRect();
+    let top, left;
+    if (placement.includes('top')) top = r.top - ttRect.height - 16;
+    else top = r.bottom + 16;
+    if (placement.includes('left')) left = Math.max(10, r.left + r.width/2 - ttRect.width);
+    else if (placement.includes('right')) left = Math.min(window.innerWidth - ttRect.width - 10, r.right - ttRect.width);
+    else left = Math.max(10, Math.min(window.innerWidth - ttRect.width - 10, r.left + r.width/2 - ttRect.width/2));
+    if (top < 10) top = r.bottom + 16;
+    tooltip.style.cssText = `left:${left}px;top:${top}px;`;
+  };
+  showStep();
+}
+
+// Pull-to-refresh visual hint — adds .scrolled-top class to body
+function setupPullToRefreshHint() {
+  const update = () => {
+    document.body.classList.toggle('scrolled-top', (window.scrollY || 0) < 5);
+  };
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+}
+
 // Tag autocomplete — show matching tags as user types in tx name
 function renderTagAutocomplete(query, tx) {
   const list = $('#tagAutocompleteList');
@@ -4408,6 +4531,7 @@ function init() {
   setupModalDrag();
   setupFocusTrap();
   setupGridKeyboardNav();
+  setupPullToRefreshHint();
 
   // Onboarding CTAs
   $('#ctaAddFirst')?.addEventListener('click', () => openExpenseModal());
@@ -4544,6 +4668,9 @@ function init() {
   const valid = Object.keys(TITLES);
   navigate(valid.includes(hash) ? hash : 'dashboard');
 
+  // Show onboarding tour after first paint (skip if already seen or empty)
+  maybeShowOnboardingTour();
+
   // PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -4551,6 +4678,10 @@ function init() {
 
   // PWA install prompt — capture and offer inline button
   setupInstallPrompt();
+
+  // Bulk action bar buttons
+  $('#bulkDeleteBtn')?.addEventListener('click', bulkDelete);
+  $('#bulkCancelBtn')?.addEventListener('click', exitBulkMode);
 }
 
 // PWA install prompt — show banner when browser allows install

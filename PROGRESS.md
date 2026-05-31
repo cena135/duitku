@@ -196,7 +196,20 @@ User: "aku pingin interaktif + enak dilihat"
 
 Bug: SVG namespace bug returns (sparkline `el('svg')`). Fix: createElement span + innerHTML wrapper.
 
-### 🚀 Round 12 (current): /waste marathon (45/45 PASS) — 7 features
+### 🌀 Cycle 13 (current): /waste 5 kali — cycle 1 of 5
+
+User clarified `waste N kali` = N full cycles where each cycle ≈ 5 substantive tasks bundled together. This is **cycle 1 of 5**.
+
+Tasks in this cycle:
+1. **Reports: Net Worth chart** — 6-month line chart replaying expenses chronologically; computes running balance per month-end across all `includeInTotal` accounts. Summary: 6-month delta + percentage.
+2. **Reports: Year-over-Year comparison card** — same month last year vs this month. Hidden if no prior data.
+3. **Subscription view: 30-day renewal mini-calendar** — strip of 30 day cells, today highlighted, days-with-renewal get accent tint + dot. Footer: total renewals + total cost.
+4. **Smart category learning** — `learnCategoryFromTx()` records name→category mapping in `settings.categoryLearning` when same name used with same category 3+ times. `suggestCategory()` now checks learned mappings first.
+5. **Onboarding tour** — 4-step overlay tooltips (FAB, Laporan, Pengaturan, Stats widget) with spotlight effect. Triggered first time after seed/first tx. Skip/Next buttons, click backdrop to dismiss. `settings.tourSeen` flag.
+6. **Pull-to-refresh visual hint** — animated "↓ Tarik ke bawah" text at top of dashboard when scrollTop < 5.
+7. **Bulk select mode** — long-press tx → "Pilih beberapa…" option enters bulk mode. Tap rows to toggle. Floating action bar with Delete/Cancel. Undo toast for batch delete.
+
+### 🚀 Round 12: /waste marathon (45/45 PASS) — 7 features
 
 Mix of perf + features + a11y + UX + tests, executed back-to-back per user clarification: "lakukan apapun, sebanyak mungkin, seperti selfplay, test e2e, rewrite code, 50 kali".
 
